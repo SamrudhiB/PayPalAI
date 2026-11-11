@@ -1,0 +1,423 @@
+import { Gantt } from '@bryntum/gantt';
+import '@bryntum/gantt/gantt.css';
+import '@bryntum/gantt/svalbard-light.css';
+import '@bryntum/gantt/fontawesome/css/fontawesome.css';
+import '@bryntum/gantt/fontawesome/css/solid.css';
+import './style.css';
+
+import { agency, lateDeposit } from '../src/seed.js';
+import { evaluate, generatePlans, simulateRisk, toLlmInput } from '../src/engine.js';
+import { templateExplanation, validateExplanation } from '../src/explain.js';
+
+/* ---------- helpers ---------- */
+
+const $ = (s) => document.querySelector(s);
+const MINUS = '−';
+const usd = (n) => (n < 0 ? MINUS + '$' : '$') + Math.abs(Math.round(n)).toLocaleString('en-US');
+const pct = (x) => Math.round(x * 100);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+// Engine days are working days. Day 1 is Monday 9 Nov 2026; weekends are skipped, like the Gantt's calendar.
+const dayToDate = (n) => new Date(2026, 10, 9 + Math.floor((n - 1) / 5) * 7 + ((n - 1) % 5));
+const dayAfter = (n) => { const d = dayToDate(n); d.setDate(d.getDate() + 1); return d; };
+
+const PAYMENT = lateDeposit.paymentId;
+const baseline = evaluate(agency);
+const people = Object.fromEntries(agency.people.map((p) => [p.id, p.name]));
+const originalPerson = Object.fromEntries(agency.tasks.map((t) => [t.id, t.person]));
+const promised = agency.payments.find((p) => p.id === PAYMENT);
+const clientName = agency.projects.find((p) => p.id === promised.project).name.split(' ')[0];
+
+const state = {
+  newDay: lateDeposit.newDay,
+  selected: 'A',
+  applied: null,
+  plans: null,
+  risk: null,
+  input: null,
+  explanation: null,
+};
+
+/* ---------- compute (engine runs in the browser) ---------- */
+
+function compute(runs) {
+  const event = { paymentId: PAYMENT, newDay: state.newDay };
+  state.plans = generatePlans(agency, event);
+  state.risk = simulateRisk(state.plans, agency, { runs, seed: 7 });
+  state.input = toLlmInput(agency, event, state.plans, state.risk);
+  if (!state.plans[state.selected]) state.selected = 'A';
+  if (state.applied && !state.plans[state.applied]) state.applied = null;
+}
+
+/* ---------- banner ---------- */
+
+function renderBanner() {
+  const late = state.newDay - promised.day;
+  const payroll = agency.expenses.filter((e) => e.payroll && e.day > agency.today).sort((a, b) => a.day - b.day)[0];
+  const el = $('#banner');
+  el.className = 'hero';
+  const amount = usd(promised.amount);
+  el.innerHTML = `
+    <h1>${esc(clientName)}&rsquo;s ${amount} deposit is <span class="n">${late} days</span> late.</h1>
+    <p>It was due on day ${promised.day} and is now promised for day ${state.newDay}. ${usd(payroll.amount)} payroll is due on day ${payroll.day}. Here is what each option does to the schedule, the cash and the risk.</p>
+    ${state.applied ? `<div class="state" role="status">Plan ${state.applied} approved. The schedule below shows the approved plan.</div>` : ''}`;
+}
+
+/* ---------- plan cards ---------- */
+
+function cashRange() {
+  let lo = 0, hi = 0;
+  const all = [baseline.cash, ...Object.values(state.plans).map((p) => p.cash)];
+  for (const series of all) for (const c of series.slice(0, 41)) { lo = Math.min(lo, c.cash); hi = Math.max(hi, c.cash); }
+  return [Math.floor(lo / 1000) * 1000, Math.ceil(hi / 1000) * 1000];
+}
+
+function stepPath(series, X, Y, maxDay) {
+  let prev = series[0].cash;
+  let d = `M${X(0).toFixed(1)},${Y(prev).toFixed(1)}`;
+  for (let i = 1; i <= maxDay; i++) {
+    const c = series[i].cash;
+    if (c !== prev) { d += `H${X(i).toFixed(1)}V${Y(c).toFixed(1)}`; prev = c; }
+  }
+  return d + `H${X(maxDay).toFixed(1)}`;
+}
+
+function sparkline(series, [lo, hi], id) {
+  const W = 240, H = 54, p = 3, maxDay = 40;
+  const X = (d) => p + (d / maxDay) * (W - 2 * p);
+  const Y = (v) => p + (1 - (v - lo) / (hi - lo)) * (H - 2 * p);
+  const line = stepPath(series, X, Y, maxDay);
+  const z = Y(0);
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Cash over time">
+    <defs><clipPath id="neg-${id}"><rect x="0" y="${z}" width="${W}" height="${H}"/></clipPath></defs>
+    <line x1="0" x2="${W}" y1="${z}" y2="${z}" stroke="#aeb9b2" stroke-width="1"/>
+    <path d="${line}" fill="none" stroke="#12222b" stroke-width="1.8" vector-effect="non-scaling-stroke"/>
+    <path d="${line}" fill="none" stroke="#c4314b" stroke-width="2.4" clip-path="url(#neg-${id})" vector-effect="non-scaling-stroke"/>
+  </svg>`;
+}
+
+function riskClass(p) { return p >= 0.67 ? 'bad' : p >= 0.15 ? 'warn' : 'good'; }
+
+function renderPlans() {
+  const host = $('#plans');
+  const range = cashRange();
+  host.innerHTML = '';
+  const rec = state.explanation?.recommended_plan;
+  for (const [key, plan] of Object.entries(state.plans)) {
+    const r = state.risk[key];
+    const acme = plan.projects.acme, bright = plan.projects.brightly;
+    const payrollPct = pct(r.pMissPayroll);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'plan';
+    btn.setAttribute('role', 'radio');
+    btn.setAttribute('aria-checked', String(state.selected === key));
+    btn.dataset.key = key;
+    btn.innerHTML = `
+      <b class="plan-name">Plan ${key}: ${esc(plan.name)}</b>
+      <div class="plan-tags">
+        ${rec === key ? '<span class="badge rec">Recommended</span>' : ''}
+        ${state.applied === key ? '<span class="badge applied">Approved</span>' : ''}</div>
+      <p class="plan-change">${esc(plan.change)}</p>
+      ${sparkline(plan.cash, range, key)}
+      <dl class="facts">
+        <dt>Payroll missed in</dt><dd class="big ${riskClass(r.pMissPayroll)}">${payrollPct}%</dd>
+        <div class="bar" aria-hidden="true"><i style="width:${payrollPct}%"></i></div>
+        <dt>${esc(clientName)} delivered</dt><dd class="${acme.slip ? 'bad' : 'good'}">day ${acme.finish}${acme.slip ? ` (${acme.slip} late)` : ' (on time)'}</dd>
+        <dt>Brightly delivered</dt><dd class="${bright.slip ? 'bad' : 'good'}">day ${bright.finish}${bright.slip ? ` (${bright.slip} late)` : ' (on time)'}</dd>
+        <dt>Lowest cash, if paid on the promised date</dt><dd class="${plan.lowestCash < 0 ? 'bad' : ''}">${usd(plan.lowestCash)}</dd>
+        <dt>Unpaid-work risk</dt><dd class="${plan.unpaidWorkDays ? 'warn' : ''}">${plan.unpaidWorkDays ? `${plan.unpaidWorkDays} days, ${pct(r.pUnpaidWork)}% chance` : 'none'}</dd>
+      </dl>`;
+    btn.addEventListener('click', () => select(key));
+    host.appendChild(btn);
+  }
+}
+
+function select(key) {
+  state.selected = key;
+  renderPlans();
+  renderBoard();
+}
+
+/* ---------- Gantt ---------- */
+
+const taskIndex = Object.fromEntries(agency.tasks.map((t, i) => [t.id, i]));
+const orderOfTask = (id) => (taskIndex[id] ?? taskIndex[id.slice(0, -1)]) * 10 + (taskIndex[id] === undefined ? (id.endsWith('b') ? 2 : 1) : 0);
+const orderOfPayment = (p) => {
+  const gated = agency.tasks.find((t) => t.gate === p.id);
+  if (gated) return taskIndex[gated.id] * 10 - 5; // a deposit sits just above the work it unlocks
+  return taskIndex[p.afterTasks[p.afterTasks.length - 1]] * 10 + 5; // a milestone sits just below the work that earns it
+};
+
+function ganttModel(plan) {
+  const homeDays = baseline.schedule.paymentDays;
+  const leaves = [];
+  const unpaid = new Set(plan.data.tasks.filter((t) => t.gateWas).map((t) => t.id));
+  for (const t of plan.schedule.tasks) {
+    const moved = originalPerson[t.id] ? originalPerson[t.id] !== t.person : originalPerson[t.id.slice(0, -1)] !== t.person;
+    leaves.push({
+      id: t.id,
+      project: t.project,
+      sort: orderOfTask(t.id),
+      name: `${t.name} (${people[t.person]})`,
+      startDate: dayToDate(t.start),
+      duration: t.end - t.start + 1,
+      durationUnit: 'day',
+      manuallyScheduled: true,
+      cls: `proj-${t.project}${unpaid.has(t.id) ? ' at-risk' : ''}${moved ? ' moved' : ''}`,
+    });
+  }
+  for (const p of plan.data.payments) {
+    const day = plan.schedule.paymentDays.get(p.id);
+    const home = homeDays.get(p.id);
+    const status = day > home ? 'late' : day < home ? 'early' : 'ontime';
+    leaves.push({
+      id: 'pay-' + p.id,
+      project: p.project,
+      sort: orderOfPayment(p),
+      name: `${p.label} ${usd(p.amount)}`,
+      startDate: dayToDate(day),
+      duration: 0,
+      manuallyScheduled: true,
+      cls: `pay pay-${status}`,
+    });
+  }
+  const deadline = Object.fromEntries(agency.projects.map((p) => [p.id, p.deadline]));
+  const lastTask = Object.fromEntries(agency.projects.map((p) => {
+    const ts = plan.schedule.tasks.filter((t) => t.project === p.id);
+    return [p.id, ts.reduce((a, b) => (b.end > a.end ? b : a)).id];
+  }));
+  for (const l of leaves) if (lastTask[l.project] === l.id) l.deadlineDate = dayAfter(deadline[l.project]);
+  leaves.sort((a, b) => a.sort - b.sort);
+  const groups = agency.projects.map((p) => ({ id: 'grp-' + p.id, name: p.name, expanded: true, cls: `grp proj-${p.id}`, children: [] }));
+  for (const l of leaves) groups.find((g) => g.id === 'grp-' + l.project).children.push(l);
+  const deps = plan.data.tasks.flatMap((t) => t.after.map((pid) => ({ id: `${pid}>${t.id}`, fromTask: pid, toTask: t.id })));
+  return { groups, leaves, deps };
+}
+
+let gantt;
+
+function createGantt() {
+  const m = ganttModel(state.plans[state.selected]);
+  gantt = new Gantt({
+    appendTo: 'gantt',
+    readOnly: true,
+    startDate: dayToDate(1),
+    endDate: dayToDate(36),
+    viewPreset: 'weekAndDay',
+    rowHeight: 30,
+    barMargin: 5,
+    columns: [{ type: 'name', text: 'Work and payments', width: 270 }],
+    features: {
+      timeRanges: { showCurrentTimeLine: false, showHeaderElements: false },
+      indicators: { items: { earlyDates: false, lateDates: false, deadlineDate: true, constraintDate: false } },
+      projectLines: false,
+      taskMenu: false,
+      cellMenu: false,
+      headerMenu: false,
+      taskEdit: false,
+    },
+    project: {
+      tasks: m.groups,
+      dependencies: m.deps,
+      timeRanges: [{ id: 'today', name: 'Today', startDate: dayToDate(6), duration: 0 }],
+    },
+  });
+  fitGantt();
+  let resizeTimer;
+  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(fitGantt, 150); });
+}
+
+function fitGantt() {
+  gantt.zoomToSpan({ startDate: dayToDate(1), endDate: dayAfter(36), leftMargin: 0, rightMargin: 0 });
+}
+
+async function syncGantt() {
+  const plan = state.plans[state.selected];
+  const m = ganttModel(plan);
+  const project = gantt.project;
+  const store = project.taskStore;
+  const want = new Map(m.leaves.map((l) => [String(l.id), l]));
+  const stale = [];
+  store.traverse((r) => { if (r.isLeaf && !String(r.id).startsWith('grp-') && !want.has(String(r.id))) stale.push(r); });
+  stale.forEach((r) => r.remove());
+  const sortOf = new Map(m.leaves.map((l) => [String(l.id), l.sort]));
+  for (const l of m.leaves) {
+    const rec = store.getById(l.id);
+    if (rec) { rec.set({ name: l.name, startDate: l.startDate, duration: l.duration, cls: l.cls, deadlineDate: l.deadlineDate ?? null }); continue; }
+    const group = store.getById('grp-' + l.project);
+    const next = group.children.find((c) => sortOf.get(String(c.id)) > l.sort);
+    if (next) group.insertChild(l, next); else group.appendChild(l);
+  }
+  project.dependencyStore.removeAll();
+  project.dependencyStore.add(m.deps);
+  await project.commitAsync();
+}
+
+/* ---------- cash chart ---------- */
+
+function renderCash() {
+  const plan = state.plans[state.selected];
+  const W = 1000, H = 250, L = 64, R = 18, T = 26, B = 30, maxDay = 40;
+  const [lo0, hi0] = cashRange();
+  const lo = lo0 - 1000, hi = hi0 + 1000;
+  const X = (d) => L + (d / maxDay) * (W - L - R);
+  const Y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+  const z = Y(0);
+  const step = Math.max(2000, Math.ceil((hi - lo) / 5 / 1000) * 1000);
+  let grid = '';
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) {
+    grid += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="${v === 0 ? '#12222b' : '#e1e6e2'}" stroke-width="${v === 0 ? 1.4 : 1}"/><text x="${L - 8}" y="${Y(v) + 4}" text-anchor="end">${usd(v)}</text>`;
+  }
+  let ticks = '';
+  for (let d = 0; d <= maxDay; d += 5) ticks += `<text x="${X(d)}" y="${H - 8}" text-anchor="middle">day ${d}</text>`;
+  const payroll = agency.expenses.filter((e) => e.payroll).map((e) => `
+    <line x1="${X(e.day)}" x2="${X(e.day)}" y1="${T - 6}" y2="${H - B}" stroke="#566872" stroke-dasharray="3 4"/>
+    <text x="${X(e.day)}" y="${T - 10}" text-anchor="middle">Payroll ${usd(e.amount)}</text>`).join('');
+  const dayMark = (d, label, color) => `<line x1="${X(d)}" x2="${X(d)}" y1="${T}" y2="${H - B}" stroke="${color}" stroke-width="1.5"/><text x="${X(d) + 5}" y="${H - B - 8}" fill="${color}" style="fill:${color};font-weight:600">${label}</text>`;
+  const line = stepPath(plan.cash, X, Y, maxDay);
+  const area = `${line}V${z}H${X(0)}Z`;
+  const ghost = stepPath(baseline.cash, X, Y, maxDay);
+  let lowPoint = plan.cash[agency.today];
+  for (const c of plan.cash.slice(agency.today, maxDay + 1)) if (c.cash < lowPoint.cash) lowPoint = c;
+  const low = lowPoint.day, lowCash = lowPoint.cash;
+  const lowLabel = lowCash < 0
+    ? `<circle cx="${X(low)}" cy="${Y(lowCash)}" r="4.5" fill="#c4314b"/><text class="low" x="${X(low) + (low <= agency.today + 2 ? 10 : -10)}" y="${Y(lowCash) + (low <= agency.today + 2 ? -10 : 4)}" text-anchor="${low <= agency.today + 2 ? 'start' : 'end'}" style="fill:#c4314b">${usd(lowCash)} on day ${low}</text>`
+    : `<circle cx="${X(low)}" cy="${Y(lowCash)}" r="4.5" fill="#12222b"/><text class="low" x="${X(low) + (low <= agency.today + 2 ? 10 : -10)}" y="${Y(lowCash) + (low <= agency.today + 2 ? -10 : 4)}" text-anchor="${low <= agency.today + 2 ? 'start' : 'end'}" style="fill:#12222b">${usd(lowCash)} on day ${low}</text>`;
+  $('#cash').innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Cash balance by day for Plan ${state.selected}. Lowest cash from today ${usd(lowCash)} on day ${low}.">
+      <defs>
+        <clipPath id="below"><rect x="0" y="${z}" width="${W}" height="${H}"/></clipPath>
+        <clipPath id="above"><rect x="0" y="0" width="${W}" height="${z}"/></clipPath>
+      </defs>
+      ${grid}${ticks}${payroll}
+      <path d="${ghost}" fill="none" stroke="#8b9a92" stroke-width="1.6" stroke-dasharray="5 4"/>
+      <path d="${area}" fill="#1e7b61" fill-opacity=".09" clip-path="url(#above)"/>
+      <path d="${area}" fill="#c4314b" fill-opacity=".18" clip-path="url(#below)"/>
+      <path d="${line}" fill="none" stroke="#12222b" stroke-width="2.4" clip-path="url(#above)"/>
+      <path d="${line}" fill="none" stroke="#c4314b" stroke-width="2.8" clip-path="url(#below)"/>
+      ${dayMark(agency.today, 'today', '#2f5d7c')}
+      ${lowLabel}
+    </svg>`;
+  $('#cash-note').textContent = `Solid line: Plan ${state.selected}, if ${clientName} pays on day ${state.newDay}. Dashed line: if ${clientName} had paid on day ${promised.day}.`;
+}
+
+function renderBoard() {
+  const plan = state.plans[state.selected];
+  $('#board-title').textContent = `Schedule under Plan ${state.selected}: ${plan.name}`;
+  if (gantt) syncGantt();
+  renderCash();
+}
+
+/* ---------- assessment + approval ---------- */
+
+function renderAssess() {
+  const el = $('#assess');
+  const ex = state.explanation;
+  if (!ex) {
+    el.innerHTML = `<h2>Assessing the options&hellip;</h2><p class="loading" role="status">Comparing the plans against 2,000 simulated futures and writing a recommendation.</p>`;
+    return;
+  }
+  const plan = state.plans[ex.recommended_plan];
+  const isApplied = state.applied === ex.recommended_plan;
+  const src = ex.source === 'gemini'
+    ? `<p class="source">Written by ${esc(ex.model)}. Every number in this text was checked against the engine&rsquo;s output.</p>`
+    : `<p class="source warn">Template answer: the AI model was unavailable, so this text comes from a fixed rule. The numbers are the same.</p>`;
+  el.innerHTML = `
+    <h2>${esc(ex.headline)}</h2>
+    <ul>${ex.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>
+    <p class="alt">${esc(ex.when_to_pick_another)}</p>
+    <div class="message"><h3>Message to ${esc(clientName)}, ready to send</h3><p id="msg">${esc(ex.client_message)}</p></div>
+    <div class="actions">
+      <button class="btn" id="approve" type="button" ${isApplied ? 'disabled' : ''}>${isApplied ? `Plan ${ex.recommended_plan} approved` : `Approve Plan ${ex.recommended_plan}`}</button>
+      <button class="btn ghost" id="copy" type="button">Copy message</button>
+      ${state.applied ? '<button class="btn ghost" id="undo" type="button">Undo approval</button>' : ''}
+    </div>
+    ${src}`;
+  $('#approve')?.addEventListener('click', () => {
+    state.applied = ex.recommended_plan;
+    state.selected = ex.recommended_plan;
+    renderAll();
+  });
+  $('#undo')?.addEventListener('click', () => { state.applied = null; renderAll(); });
+  $('#copy').addEventListener('click', async (e) => {
+    try { await navigator.clipboard.writeText(ex.client_message); e.target.textContent = 'Copied'; }
+    catch { e.target.textContent = 'Select the text above to copy'; }
+    setTimeout(() => { e.target.textContent = 'Copy message'; }, 1800);
+  });
+  void plan;
+}
+
+let explainToken = 0;
+async function loadExplanation() {
+  const token = ++explainToken;
+  state.explanation = null;
+  renderAssess();
+  let result;
+  try {
+    const res = await fetch('/api/explain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state.input) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    result = await res.json();
+  } catch {
+    result = templateExplanation(state.input);
+  }
+  if (token !== explainToken) return; // a newer date was chosen while this was loading
+  if (validateExplanation(result, state.input).length) result = templateExplanation(state.input);
+  state.explanation = result;
+  renderPlans();
+  renderAssess();
+}
+
+/* ---------- what-if ---------- */
+
+let debounce;
+function setupSlider() {
+  const slider = $('#slider');
+  const label = $('#slider-label');
+  const show = () => { label.textContent = `${clientName} pays on day ${state.newDay} (${state.newDay - promised.day} days after the due date)`; slider.value = state.newDay; };
+  show();
+  slider.addEventListener('input', () => {
+    state.newDay = Number(slider.value);
+    show();
+    clearTimeout(debounce);
+    debounce = setTimeout(() => { compute(800); renderAll(); loadExplanation(); }, 350);
+  });
+  $('#reset').addEventListener('click', () => {
+    state.newDay = lateDeposit.newDay; show();
+    compute(2000); renderAll(); loadExplanation();
+  });
+}
+
+/* ---------- live PayPal events ---------- */
+
+async function pollEvents() {
+  try {
+    const res = await fetch('/api/events');
+    const events = await res.json();
+    const e = events[0];
+    $('#feed').innerHTML = e
+      ? `${esc(e.type)}${e.custom_id ? ' for ' + esc(e.custom_id) : ''}${e.amount ? ' ' + esc('$' + e.amount) : ''}, signature <span class="${e.signature === 'SUCCESS' ? 'ok' : ''}">${esc(e.signature)}</span>`
+      : 'Connected. No payments received yet.';
+  } catch {
+    $('#feed').textContent = 'Offline';
+  }
+}
+
+/* ---------- boot ---------- */
+
+function renderAll() {
+  renderBanner();
+  renderPlans();
+  renderBoard();
+}
+
+compute(2000);
+renderBanner();
+renderPlans();
+createGantt();
+renderBoard();
+setupSlider();
+loadExplanation();
+pollEvents();
+setInterval(pollEvents, 5000);
+window.__ballast = { state, gantt: () => gantt }; // for automated checks

@@ -269,7 +269,7 @@ export function toLlmInput(base, event, plans, risk) {
     facts: {
       starting_cash: base.startingCash,
       expenses: base.expenses.map((e) => ({ day: e.day, amount: e.amount, label: e.label })),
-      late_payment: { client: proj.name, label: p.label, amount: p.amount, expected_day: p.day, new_expected_day: event.newDay },
+      late_payment: { client: proj.name, label: p.label, amount: p.amount, expected_day: p.day, new_expected_day: event.newDay, days_late: event.newDay - p.day },
       deadlines: Object.fromEntries(base.projects.map((x) => [x.name, x.deadline])),
     },
     plans: Object.fromEntries(

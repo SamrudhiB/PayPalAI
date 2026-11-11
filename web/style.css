@@ -1,0 +1,133 @@
+:root {
+  --paper: #f1f3ef;
+  --panel: #fbfcfa;
+  --ink: #12222b;
+  --slate: #566872;
+  --rule: #d3dad4;
+  --received: #1e7b61;
+  --overdue: #c4314b;
+  --hold: #b9830b;
+  --acme: #2f5d7c;
+  --brightly: #6a4c73;
+  --radius: 6px;
+  --display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+  --body: 'Instrument Sans', 'Segoe UI', system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html { background: var(--paper); }
+body { margin: 0; color: var(--ink); font: 400 15px/1.5 var(--body); background: var(--paper); font-variant-numeric: tabular-nums; }
+h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 20px; font-weight: 700; }
+h3 { font-size: 16px; font-weight: 700; }
+p { margin: 0; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--acme); outline-offset: 2px; }
+
+.top { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 32px; border-bottom: 1px solid var(--rule); background: var(--panel); }
+.brand { font: 700 22px var(--display); letter-spacing: -0.02em; }
+.feed { font-size: 13px; color: var(--slate); display: flex; gap: 10px; align-items: baseline; min-width: 0; }
+.feed-label { font-weight: 600; color: var(--ink); white-space: nowrap; }
+#feed { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#feed .ok { color: var(--received); font-weight: 600; }
+
+main { max-width: 1320px; margin: 0 auto; padding: 0 32px 24px; }
+
+/* The one loud element: the late payment, in large type. */
+.hero { padding: 36px 0 28px; }
+.hero h1 { font-size: clamp(32px, 5vw, 60px); line-height: 1.02; font-weight: 700; max-width: 18ch; }
+.hero h1 .n { color: var(--overdue); }
+.hero.ontime h1 .n { color: var(--received); }
+.hero p { margin-top: 14px; color: var(--slate); font-size: 17px; max-width: 62ch; }
+.hero .state { margin-top: 18px; display: inline-flex; gap: 10px; align-items: center; font-weight: 600; color: var(--received); }
+.hero .state::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--received); }
+
+.plans-head { display: flex; justify-content: space-between; align-items: baseline; gap: 24px; margin-bottom: 12px; }
+.plans-head p { color: var(--slate); font-size: 13px; max-width: 60ch; text-align: right; }
+.plan-row { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }
+.plan { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; gap: 10px; padding: 18px 20px 20px; border-top: 4px solid transparent; border-left: 1px solid var(--rule); min-width: 0; transition: background-color .2s; }
+.plan:first-child { border-left: 0; }
+.plan:hover { background: #f5f7f3; }
+.plan:focus-visible { outline: 3px solid var(--acme); outline-offset: -3px; }
+.plan[aria-checked='true'] { border-top-color: var(--ink); background: #fff; }
+.plan-name { font: 700 18px/1.25 var(--display); min-height: 1.25em; }
+@media (max-width: 1200px) { .plan-name { min-height: 2.5em; } }
+.plan-tags { display: flex; gap: 8px; min-height: 24px; margin-top: -6px; }
+.badge { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 99px; border: 1px solid currentColor; white-space: nowrap; }
+.badge.rec { color: var(--received); }
+.badge.applied { color: #fff; background: var(--ink); border-color: var(--ink); }
+.plan-change { color: var(--slate); font-size: 13.5px; min-height: 3.1em; }
+.spark { width: 100%; height: 54px; display: block; }
+.facts { display: grid; grid-template-columns: 1fr auto; gap: 5px 12px; margin: 0; font-size: 14px; }
+.facts dt { color: var(--slate); }
+.facts dd { margin: 0; text-align: right; font-weight: 600; }
+.facts .big { font: 700 28px/1 var(--display); }
+.bad { color: var(--overdue); } .good { color: var(--received); } .warn { color: var(--hold); }
+.bar { grid-column: 1 / -1; height: 6px; background: #e4e9e5; border-radius: 3px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--overdue); }
+
+.board { margin-top: 28px; background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius); padding: 18px 20px 20px; }
+.board-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px 24px; margin-bottom: 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--slate); }
+.legend .sw { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 2px; vertical-align: -1px; }
+.sw.late { background: var(--overdue); } .sw.early { background: var(--received); } .sw.risk { background: repeating-linear-gradient(45deg, #fff 0 3px, var(--hold) 3px 6px); border: 1px solid var(--hold); } .sw.moved { background: var(--received); outline: 2px solid var(--ink); outline-offset: -2px; }
+.gantt-host { height: 510px; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+.cash-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px 24px; margin: 18px 0 6px; }
+.cash-head p { color: var(--slate); font-size: 13px; }
+#cash svg { width: 100%; height: auto; display: block; }
+#cash text { font: 500 12px var(--body); fill: var(--slate); }
+#cash .low { font-weight: 600; }
+
+.decide { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr); gap: 24px; margin-top: 28px; align-items: start; }
+.assess, .whatif { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius); padding: 20px 22px; }
+.assess h2 { font-size: 24px; line-height: 1.2; }
+.assess ul { margin: 12px 0 0; padding-left: 20px; }
+.assess li { margin: 4px 0; max-width: 70ch; }
+.assess .alt { margin-top: 10px; color: var(--slate); max-width: 70ch; }
+.source { margin-top: 12px; font-size: 12.5px; color: var(--slate); }
+.source.warn { color: var(--hold); }
+.message { margin-top: 18px; border-left: 3px solid var(--rule); padding: 2px 0 2px 14px; }
+.message h3 { font-size: 14px; margin-bottom: 4px; }
+.message p { max-width: 70ch; white-space: pre-wrap; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.btn { cursor: pointer; border: 1px solid var(--ink); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: var(--radius); font-weight: 600; }
+.btn:hover { background: #1c3340; }
+.btn.ghost { background: transparent; color: var(--ink); }
+.btn.ghost:hover { background: #e9eee9; }
+.btn[disabled] { opacity: .5; cursor: default; }
+.loading { color: var(--slate); }
+.whatif h2 { font-size: 18px; margin-bottom: 10px; }
+.whatif label { display: block; font-weight: 600; margin-bottom: 6px; }
+.whatif input[type='range'] { width: 100%; accent-color: var(--ink); }
+.slider-scale { display: flex; justify-content: space-between; font-size: 12px; color: var(--slate); }
+.hint { margin-top: 14px; font-size: 13px; color: var(--slate); }
+.link { all: unset; cursor: pointer; margin-top: 10px; color: var(--acme); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.link:focus-visible { outline: 3px solid var(--acme); outline-offset: 2px; }
+.foot { max-width: 1320px; margin: 0 auto; padding: 8px 32px 40px; color: var(--slate); font-size: 13px; }
+.foot p { max-width: 90ch; }
+
+/* Bryntum: bars coloured by project, payment milestones by status.
+   The theme derives bar colours from variables declared on the task wrapper, so they are set there. */
+.gantt-host .b-gantt-task-wrap:has(.proj-acme) { --b-gantt-task-primary: var(--acme); --b-gantt-parent-task-primary: var(--acme); }
+.gantt-host .b-gantt-task-wrap:has(.proj-brightly) { --b-gantt-task-primary: var(--brightly); --b-gantt-parent-task-primary: var(--brightly); }
+.gantt-host .b-gantt-task-wrap:has(.pay-late) { --b-gantt-milestone-primary: var(--overdue); }
+.gantt-host .b-gantt-task-wrap:has(.pay-early) { --b-gantt-milestone-primary: var(--received); }
+.gantt-host .b-gantt-task-wrap:has(.pay-ontime) { --b-gantt-milestone-primary: var(--slate); }
+.gantt-host .b-gantt-task.proj-acme:not(.grp) { background-color: var(--acme); border-color: var(--acme); }
+.gantt-host .b-gantt-task.proj-brightly:not(.grp) { background-color: var(--brightly); border-color: var(--brightly); }
+.gantt-host .b-gantt-task.pay-late { background-color: var(--overdue); }
+.gantt-host .b-gantt-task.pay-early { background-color: var(--received); }
+.gantt-host .b-gantt-task.pay-ontime { background-color: var(--slate); }
+.gantt-host .b-gantt-task.at-risk { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.4) 0 4px, transparent 4px 8px); outline: 2px dashed var(--hold); outline-offset: 1px; }
+.gantt-host .b-gantt-task.moved { outline: 2px solid var(--ink); outline-offset: 1px; }
+/* reflow animation when a different plan is previewed */
+.gantt-host .b-gantt-task-wrap { transition: inset-inline-start .6s cubic-bezier(.2,.7,.2,1), width .6s cubic-bezier(.2,.7,.2,1), top .4s ease; }
+
+@media (max-width: 960px) {
+  main, .top, .foot { padding-left: 16px; padding-right: 16px; }
+  .plan-row { grid-template-columns: 1fr; }
+  .plan { border-left: 0; border-top: 4px solid transparent; border-bottom: 1px solid var(--rule); }
+  .plans-head { flex-direction: column; gap: 4px; } .plans-head p { text-align: left; }
+  .decide { grid-template-columns: 1fr; }
+  .gantt-host { height: 460px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

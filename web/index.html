@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ballast: what to do when a client pays late</title>
+    <meta name="description" content="When a client pays late, Ballast shows every recovery option, simulates the risk of each against thousands of possible payment dates, and applies the plan you approve." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">Ballast</div>
+      <nav class="feed" aria-label="Live PayPal events"><span class="feed-label">PayPal sandbox</span><span id="feed">Waiting for events</span></nav>
+    </header>
+
+    <main>
+      <section class="hero" id="banner" aria-live="polite"></section>
+
+      <section class="plans" aria-label="Recovery plans">
+        <div class="plans-head">
+          <h2>Your options</h2>
+          <p id="plans-note">Figures marked "if on the promised date" assume Acme pays when it says it will. The percentages replay each plan against 2,000 possible futures.</p>
+        </div>
+        <div class="plan-row" id="plans" role="radiogroup" aria-label="Choose a plan to preview"></div>
+      </section>
+
+      <section class="board" aria-label="Schedule and cash">
+        <div class="board-head">
+          <h2 id="board-title">Schedule</h2>
+          <div class="legend" aria-hidden="true">
+            <span><i class="sw late"></i>Payment late</span>
+            <span><i class="sw early"></i>Payment earlier</span>
+            <span><i class="sw risk"></i>Work started before payment</span>
+            <span><i class="sw moved"></i>Reassigned</span>
+          </div>
+        </div>
+        <div id="gantt" class="gantt-host"></div>
+        <div class="cash-head"><h3>Cash</h3><p id="cash-note"></p></div>
+        <div id="cash"></div>
+      </section>
+
+      <section class="decide" aria-label="Assessment and approval">
+        <div class="assess" id="assess"></div>
+        <aside class="whatif">
+          <h2>What if Acme pays later or sooner?</h2>
+          <label for="slider" id="slider-label"></label>
+          <input id="slider" type="range" min="6" max="40" step="1" />
+          <div class="slider-scale"><span>day 6</span><span>day 40</span></div>
+          <p class="hint">Every number on this page is recomputed from the chosen date. The AI only explains the result.</p>
+          <button class="link" id="reset" type="button">Back to the promised date</button>
+        </aside>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <p>Schedules, cash and risk come from a deterministic engine. The AI explains them and drafts the message, and answers that use a number the engine did not produce are rejected. Client payment habits are sample data.</p>
+    </footer>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

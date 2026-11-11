@@ -3,10 +3,18 @@
   "version": "0.2.0",
   "type": "module",
   "private": true,
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test test/engine.test.js",
+    "build": "vite build",
+    "dev": "vite",
+    "test": "node --test test/engine.test.js test/explain.test.js",
     "demo": "node src/run.js"
+  },
+  "dependencies": {
+    "@bryntum/gantt": "npm:@bryntum/gantt-trial@^7.3.8",
+    "vite": "^8.3.8"
   }
 }
