@@ -131,3 +131,10 @@ main { max-width: 1320px; margin: 0 auto; padding: 0 32px 24px; }
   .gantt-host { height: 460px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+.hero .n.ok { color: var(--received); }
+.collect { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--rule, #d5d9d2); }
+.collect h3 { margin: 0 0 4px; font-size: 1rem; }
+.collect p { margin: 0 0 12px; color: var(--muted, #55656e); }
+body.paid .plans, body.paid .whatif { display: none; }
+body.paid .decide { grid-template-columns: 1fr; }

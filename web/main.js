@@ -36,6 +36,9 @@ const state = {
   risk: null,
   input: null,
   explanation: null,
+  paid: null,        // the PayPal event that settled the deposit
+  dismissed: new Set(), // events the user chose to replay past
+  request: null,     // 'creating' | 'opened' | error text
 };
 
 /* ---------- compute (engine runs in the browser) ---------- */
@@ -51,12 +54,21 @@ function compute(runs) {
 
 /* ---------- banner ---------- */
 
+const late0 = () => lateDeposit.newDay - promised.day;
+
 function renderBanner() {
   const late = state.newDay - promised.day;
   const payroll = agency.expenses.filter((e) => e.payroll && e.day > agency.today).sort((a, b) => a.day - b.day)[0];
   const el = $('#banner');
   el.className = 'hero';
   const amount = usd(promised.amount);
+  if (state.paid) {
+    el.classList.add('is-paid');
+    el.innerHTML = `
+    <h1>${esc(clientName)} paid the ${amount} deposit. <span class="n ok">Back on track.</span></h1>
+    <p>PayPal confirmed the payment with a signed event. The deposit was ${late0()} days late. The work it was blocking can start, and cash and schedule are back to the original plan.</p>`;
+    return;
+  }
   el.innerHTML = `
     <h1>${esc(clientName)}&rsquo;s ${amount} deposit is <span class="n">${late} days</span> late.</h1>
     <p>It was due on day ${promised.day} and is now promised for day ${state.newDay}. ${usd(payroll.amount)} payroll is due on day ${payroll.day}. Here is what each option does to the schedule, the cash and the risk.</p>
@@ -313,6 +325,18 @@ function renderBoard() {
 
 function renderAssess() {
   const el = $('#assess');
+  if (state.paid) {
+    el.innerHTML = `
+      <h2>Payment received. Nothing to decide.</h2>
+      <ul><li>PayPal event ${esc(state.paid.type)} for ${esc(state.paid.custom_id)}, ${esc('$' + state.paid.amount)}, signature ${esc(state.paid.signature)}.</li>
+      <li>The schedule and cash chart now show the deposit landing on day ${promised.day}.</li></ul>
+      <div class="actions"><button class="btn ghost" id="replay" type="button">Replay the late payment</button></div>`;
+    $('#replay').addEventListener('click', () => {
+      state.dismissed.add(state.paid.id); state.paid = null; state.applied = null; state.request = null; state.newDay = lateDeposit.newDay;
+      $('#slider').value = state.newDay; compute(2000); renderAll(); loadExplanation();
+    });
+    return;
+  }
   const ex = state.explanation;
   if (!ex) {
     el.innerHTML = `<h2>Assessing the options&hellip;</h2><p class="loading" role="status">Comparing the plans against 2,000 simulated futures and writing a recommendation.</p>`;
@@ -333,7 +357,9 @@ function renderAssess() {
       <button class="btn ghost" id="copy" type="button">Copy message</button>
       ${state.applied ? '<button class="btn ghost" id="undo" type="button">Undo approval</button>' : ''}
     </div>
+    ${state.applied ? collectBox() : ''}
     ${src}`;
+  $('#collect')?.addEventListener('click', requestPayment);
   $('#approve')?.addEventListener('click', () => {
     state.applied = ex.recommended_plan;
     state.selected = ex.recommended_plan;
@@ -346,6 +372,28 @@ function renderAssess() {
     setTimeout(() => { e.target.textContent = 'Copy message'; }, 1800);
   });
   void plan;
+}
+
+function collectBox() {
+  const note = state.request === 'creating' ? 'Creating the PayPal payment link&hellip;'
+    : state.request === 'opened' ? 'PayPal opened in a new tab. Pay with the sandbox buyer account. This page updates when PayPal confirms the payment.'
+    : state.request ? esc(state.request) : `Creates a PayPal payment link for ${usd(promised.amount)}. Sandbox only, no real money.`;
+  return `<div class="collect"><h3>Collect the ${esc(clientName)} deposit</h3><p id="collect-note">${note}</p>
+    <button class="btn" id="collect" type="button" ${state.request === 'creating' ? 'disabled' : ''}>Get paid with PayPal</button></div>`;
+}
+
+async function requestPayment() {
+  state.request = 'creating'; renderAssess();
+  try {
+    const res = await fetch('/api/payment-request', { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    const { approveUrl } = await res.json();
+    state.request = 'opened';
+    window.open(approveUrl, '_blank', 'noopener');
+  } catch (e) {
+    state.request = 'Could not create the PayPal link: ' + String(e.message).slice(0, 160);
+  }
+  renderAssess();
 }
 
 let explainToken = 0;
@@ -395,6 +443,11 @@ async function pollEvents() {
     const res = await fetch('/api/events');
     const events = await res.json();
     const e = events[0];
+    const settled = events.find((x) => x.type === 'PAYMENT.CAPTURE.COMPLETED' && x.custom_id === PAYMENT && x.signature === 'SUCCESS' && !state.dismissed.has(x.id));
+    if (settled && !state.paid) {
+      state.paid = settled; state.newDay = promised.day; state.selected = 'A'; state.applied = null;
+      $('#slider').value = state.newDay; compute(2000); renderAll(); renderAssess();
+    }
     $('#feed').innerHTML = e
       ? `${esc(e.type)}${e.custom_id ? ' for ' + esc(e.custom_id) : ''}${e.amount ? ' ' + esc('$' + e.amount) : ''}, signature <span class="${e.signature === 'SUCCESS' ? 'ok' : ''}">${esc(e.signature)}</span>`
       : 'Connected. No payments received yet.';
@@ -406,9 +459,11 @@ async function pollEvents() {
 /* ---------- boot ---------- */
 
 function renderAll() {
+  document.body.classList.toggle('paid', !!state.paid);
   renderBanner();
   renderPlans();
   renderBoard();
+  if (state.explanation || state.paid) renderAssess();
 }
 
 compute(2000);

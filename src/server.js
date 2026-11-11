@@ -52,6 +52,54 @@ async function verifySignature(headers, event) {
   }
 }
 
+/* ---------- PayPal Orders: payment request for the late deposit ---------- */
+
+async function paypalToken() {
+  const res = await fetch(PAYPAL_BASE + '/v1/oauth2/token', {
+    method: 'POST',
+    headers: { Authorization: 'Basic ' + Buffer.from(`${clientId}:${secret}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'grant_type=client_credentials',
+  });
+  if (!res.ok) throw new Error('PayPal auth failed: HTTP ' + res.status);
+  return (await res.json()).access_token;
+}
+
+function publicOrigin(req) {
+  if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/$/, '');
+  const proto = req.headers['x-forwarded-proto'] || 'http';
+  return `${proto}://${req.headers.host}`;
+}
+
+// The amount and the payment id come from the server's own data, never from the browser.
+export async function createPaymentRequest(origin, paymentId = lateDeposit.paymentId) {
+  const payment = agency.payments.find((p) => p.id === paymentId);
+  if (!payment) throw new Error('unknown payment');
+  if (!clientId || !secret) throw new Error('PayPal keys are not set');
+  const token = await paypalToken();
+  const res = await fetch(PAYPAL_BASE + '/v2/checkout/orders', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'PayPal-Request-Id': `req-${paymentId}-${Date.now()}` },
+    body: JSON.stringify({
+      intent: 'CAPTURE',
+      purchase_units: [{ custom_id: paymentId, description: payment.label ?? paymentId, amount: { currency_code: 'USD', value: payment.amount.toFixed(2) } }],
+      payment_source: { paypal: { experience_context: { shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW', return_url: origin + '/paypal/return', cancel_url: origin + '/?cancelled=1' } } },
+    }),
+  });
+  const order = await res.json();
+  if (!res.ok) throw new Error('PayPal order failed: ' + JSON.stringify(order).slice(0, 300));
+  const link = order.links.find((l) => l.rel === 'payer-action' || l.rel === 'approve');
+  return { orderId: order.id, approveUrl: link.href };
+}
+
+async function captureOrder(orderId) {
+  const token = await paypalToken();
+  const res = await fetch(`${PAYPAL_BASE}/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+  });
+  return { ok: res.ok, status: res.status };
+}
+
 /* ---------- AI explanation: Gemini with fallback, validated against the engine's numbers ---------- */
 
 const explainCache = new Map();
@@ -166,6 +214,21 @@ export const server = http.createServer(async (req, res) => {
     } catch (e) {
       return send(res, 400, 'bad request: ' + e.message);
     }
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/payment-request') {
+    try { return send(res, 200, await createPaymentRequest(publicOrigin(req))); }
+    catch (e) { return send(res, 502, e.message); }
+  }
+
+  // PayPal sends the buyer back here after approval; capturing the order is what actually moves the money.
+  // The browser is only told "paid" later, by the signed webhook.
+  if (req.method === 'GET' && url.pathname === '/paypal/return') {
+    const orderId = url.searchParams.get('token');
+    let ok = false;
+    try { if (orderId) ok = (await captureOrder(orderId)).ok; } catch { /* shown as failure below */ }
+    res.writeHead(302, { Location: ok ? '/?paid=pending' : '/?paid=failed' });
+    return res.end();
   }
 
   if (req.method === 'GET' && url.pathname === '/api/events') return send(res, 200, events);
