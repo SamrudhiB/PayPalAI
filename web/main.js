@@ -530,6 +530,7 @@ function renderAssess() {
       </div>`;
     $('#stress-test')?.addEventListener('click', () => {
       state.paid = null;
+      fetch('/api/reset', { method: 'POST' }).catch(() => {});
       applyScenario('severe');
     });
     $('#replay')?.addEventListener('click', () => {
@@ -689,7 +690,10 @@ function setupSlider() {
   const show = () => { label.textContent = `${clientName} pays on day ${state.newDay} (${state.newDay - promised.day} days after the due date)`; slider.value = state.newDay; };
   show();
   slider.addEventListener('input', () => {
-    if (state.paid) state.paid = null;
+    if (state.paid) {
+      state.paid = null;
+      fetch('/api/reset', { method: 'POST' }).catch(() => {});
+    }
     state.newDay = Number(slider.value);
     document.querySelectorAll('.scenario-btn').forEach((b) => b.classList.remove('active'));
     show();
@@ -709,7 +713,10 @@ function setupSlider() {
 }
 
 function applyScenario(key) {
-  if (state.paid) state.paid = null;
+  if (state.paid) {
+    state.paid = null;
+    fetch('/api/reset', { method: 'POST' }).catch(() => {});
+  }
   const sc = SCENARIOS[key];
   if (!sc) return;
   state.scenario = key;
@@ -731,10 +738,13 @@ async function pollEvents() {
     const e = events[0];
     renderActivity(ledger.audit);
     if (ledger.payments[PAYMENT] === 'paid' && !state.paid) {
-      const settled = events.find((x) => x.type === 'PAYMENT.CAPTURE.COMPLETED' && x.custom_id === PAYMENT) ?? {};
-      state.paid = { id: settled.id, type: 'PAYMENT.CAPTURE.COMPLETED', custom_id: PAYMENT, amount: settled.amount ?? promised.amount.toFixed(2), signature: settled.signature ?? 'SUCCESS' };
-      state.newDay = promised.day; state.selected = 'A'; state.applied = null;
-      $('#slider').value = state.newDay; compute(2000); renderAll(); renderAssess();
+      // Only snap to paid if the user is not actively exploring a custom what-if date
+      if (state.newDay === promised.day || state.request === 'opened' || state.request === 'creating') {
+        const settled = events.find((x) => x.type === 'PAYMENT.CAPTURE.COMPLETED' && x.custom_id === PAYMENT) ?? {};
+        state.paid = { id: settled.id, type: 'PAYMENT.CAPTURE.COMPLETED', custom_id: PAYMENT, amount: settled.amount ?? promised.amount.toFixed(2), signature: settled.signature ?? 'SUCCESS' };
+        state.newDay = promised.day; state.selected = 'A'; state.applied = null;
+        $('#slider').value = state.newDay; compute(2000); renderAll(); renderAssess();
+      }
     } else if (ledger.payments[PAYMENT] !== 'paid' && state.paid) {
       state.paid = null; // the server was reset
     }
