@@ -713,10 +713,8 @@ function setupSlider() {
 }
 
 function applyScenario(key) {
-  if (state.paid) {
-    state.paid = null;
-    fetch('/api/reset', { method: 'POST' }).catch(() => {});
-  }
+  state.paid = null;
+  fetch('/api/reset', { method: 'POST' }).catch(() => {});
   const sc = SCENARIOS[key];
   if (!sc) return;
   state.scenario = key;
@@ -734,19 +732,24 @@ function applyScenario(key) {
 
 async function pollEvents() {
   try {
+    if (new URLSearchParams(window.location.search).has('paid')) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
     const [events, ledger] = await Promise.all([fetch('/api/events').then((r) => r.json()), fetch('/api/state').then((r) => r.json())]);
     const e = events[0];
     renderActivity(ledger.audit);
     if (ledger.payments[PAYMENT] === 'paid' && !state.paid) {
-      // Only snap to paid if the user is not actively exploring a custom what-if date
-      if (state.newDay === promised.day || state.request === 'opened' || state.request === 'creating') {
-        const settled = events.find((x) => x.type === 'PAYMENT.CAPTURE.COMPLETED' && x.custom_id === PAYMENT) ?? {};
-        state.paid = { id: settled.id, type: 'PAYMENT.CAPTURE.COMPLETED', custom_id: PAYMENT, amount: settled.amount ?? promised.amount.toFixed(2), signature: settled.signature ?? 'SUCCESS' };
-        state.newDay = promised.day; state.selected = 'A'; state.applied = null;
-        $('#slider').value = state.newDay; compute(2000); renderAll(); renderAssess();
-      }
+      const settled = events.find((x) => x.type === 'PAYMENT.CAPTURE.COMPLETED' && x.custom_id === PAYMENT) ?? {};
+      state.paid = { id: settled.id, type: 'PAYMENT.CAPTURE.COMPLETED', custom_id: PAYMENT, amount: settled.amount ?? promised.amount.toFixed(2), signature: settled.signature ?? 'SUCCESS' };
+      state.newDay = promised.day; state.selected = 'A'; state.applied = null;
+      if ($('#slider')) $('#slider').value = state.newDay;
+      compute(2000);
+      renderAll();
+      renderAssess();
     } else if (ledger.payments[PAYMENT] !== 'paid' && state.paid) {
       state.paid = null; // the server was reset
+      renderAll();
+      renderAssess();
     }
     $('#feed').innerHTML = e
       ? `${esc(e.type)}${e.custom_id ? ' for ' + esc(e.custom_id) : ''}${e.amount ? ' ' + esc('$' + e.amount) : ''}, signature <span class="${e.signature === 'SUCCESS' ? 'ok' : ''}">${esc(e.signature)}</span>`

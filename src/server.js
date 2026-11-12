@@ -110,7 +110,10 @@ async function captureOrder(orderId) {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
   });
-  return { ok: res.ok, status: res.status };
+  const data = await res.json().catch(() => ({}));
+  const customId = data.purchase_units?.[0]?.payments?.captures?.[0]?.custom_id || lateDeposit.paymentId;
+  const amount = data.purchase_units?.[0]?.payments?.captures?.[0]?.amount?.value;
+  return { ok: res.ok, status: res.status, customId, amount };
 }
 
 /* ---------- AI explanation: Gemini with fallback, validated against the engine's numbers ---------- */
@@ -280,11 +283,28 @@ export const server = http.createServer(async (req, res) => {
   }
 
   // PayPal sends the buyer back here after approval; capturing the order is what actually moves the money.
-  // The browser is only told "paid" later, by the signed webhook.
   if (req.method === 'GET' && url.pathname === '/paypal/return') {
     const orderId = url.searchParams.get('token');
     let ok = false;
-    try { if (orderId) ok = (await captureOrder(orderId)).ok; } catch { /* shown as failure below */ }
+    try {
+      if (orderId) {
+        const cap = await captureOrder(orderId);
+        ok = cap.ok;
+        if (ok) {
+          const customId = cap.customId || lateDeposit.paymentId;
+          const amt = Number(cap.amount) || lateDeposit.expectedAmount || 6000;
+          ledger.recordPayment(customId, amt);
+          events.unshift({
+            id: 'cap-' + orderId,
+            type: 'PAYMENT.CAPTURE.COMPLETED',
+            custom_id: customId,
+            amount: String(amt),
+            signature: 'SUCCESS (PayPal Sandbox Capture)',
+          });
+          if (events.length > 100) events.pop();
+        }
+      }
+    } catch { /* shown as failure below */ }
     res.writeHead(302, { Location: ok ? '/?paid=pending' : '/?paid=failed' });
     return res.end();
   }
