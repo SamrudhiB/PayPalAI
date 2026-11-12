@@ -506,45 +506,33 @@ function renderAssess() {
   const el = $('#assess');
   if (state.paid) {
     el.innerHTML = `
-      <div class="settled-card">
-        <div class="settled-header">
-          <span class="settled-badge">✅ MILESTONE SETTLED · VERIFIED VIA PAYPAL WEBHOOK</span>
-          <h2>Acme deposit cleared. The agency is back in safe water.</h2>
-          <p>PayPal verified signed event <code>${esc(state.paid.type)}</code> for <strong>${esc(state.paid.custom_id)}</strong> (${esc('$' + state.paid.amount)} USD). Task A2 (Build) is unblocked for Asha. Day-14 payroll risk has dropped from 100% to <strong>0%</strong>.</p>
-        </div>
+      <div class="alert-chip ok" style="margin-bottom: 12px;">✅ Milestone Settled via PayPal · Funds Cleared</div>
+      <h2>Deposit Received. Day 14 Payroll Secured.</h2>
+      <p style="margin-top: 8px; color: var(--slate); font-size: 15px;">
+        PayPal confirmed payment with a verified webhook event (<code>${esc(state.paid.type)}</code> for <code>${esc(state.paid.custom_id)}</code>, <strong>${esc('$' + state.paid.amount)} USD</strong>). 
+        Gated task "Build" (Asha) is unblocked and cash runway is back on schedule.
+      </p>
+      
+      <div style="margin-top: 18px; padding: 14px 16px; background: #faf9f8; border: 1px solid var(--rule); border-left: 3px solid var(--acme); border-radius: 6px;">
+        <h3 style="font-size: 14px; margin-bottom: 6px; color: var(--ink);">Continuous Cash Sentinel Active</h3>
+        <p style="font-size: 13px; color: var(--slate); line-height: 1.5;">
+          In real agency operations, cash flow management never stops at one invoice. Ballast continues actively monitoring your upcoming risk horizon:
+        </p>
+        <ul style="margin: 8px 0 0 16px; font-size: 13px; color: var(--ink);">
+          <li><strong>Day 28 Payroll ($7,000):</strong> Dependent on Brightly Milestones 2 &amp; 3 landing on time.</li>
+          <li><strong>Acme Final Payment ($6,000):</strong> Due upon completion of QA &amp; Launch.</li>
+        </ul>
+      </div>
 
-        <div class="horizon-grid">
-          <div class="horizon-tile">
-            <span class="horizon-label">NEXT INCOMING MILESTONE</span>
-            <b>Brightly Milestone 1 · $4,000</b>
-            <small>Due Day 8 · 80% on-time probability</small>
-          </div>
-          <div class="horizon-tile">
-            <span class="horizon-label">NEXT PAYROLL HURDLE</span>
-            <b>$7,000 Payroll · Day 14</b>
-            <small class="good">Fully funded · Lowest projected cash: $2,000</small>
-          </div>
-          <div class="horizon-tile">
-            <span class="horizon-label">CLIENT PROFILE UPDATED</span>
-            <b>Acme Historical Risk Record</b>
-            <small class="warn">10-day delay recorded in payment profile</small>
-          </div>
-        </div>
-
-        <div class="settled-ai-insight">
-          <h3>🤖 Continuous Sentinel: AI Forward Horizon &amp; Contract Policy</h3>
-          <ul>
-            <li><strong>Team operational status:</strong> Asha, Ben, and Chitra are now 100% utilized. Zero idle person-days across the 36-day project horizon.</li>
-            <li><strong>Client learning &amp; contract advice:</strong> Because Acme delayed Milestone 1 by 10 days, Ballast recommends enforcing shorter payment gates (3 days) or requiring a 50% upfront retainer on future Acme engagements.</li>
-            <li><strong>Forward watchpoint:</strong> Day 28 payroll ($7,000) will require Brightly Milestone 2 and Milestone 3 to land within 4 days of schedule. Ballast continues background monitoring.</li>
-          </ul>
-        </div>
-
-        <div class="settled-actions">
-          <button class="btn" id="replay" type="button">🔄 Replay Day 5 Crisis (Test other recovery plans)</button>
-        </div>
+      <div class="actions" style="margin-top: 18px;">
+        <button class="btn" id="stress-test" type="button">Stress-Test Next Milestone Risk</button>
+        <button class="btn ghost" id="replay" type="button">Replay Late Deposit Crisis</button>
       </div>`;
-    $('#replay').addEventListener('click', () => {
+    $('#stress-test')?.addEventListener('click', () => {
+      state.paid = null;
+      applyScenario('severe');
+    });
+    $('#replay')?.addEventListener('click', () => {
       fetch('/api/reset', { method: 'POST' }).then(pollEvents).catch(() => {});
       state.paid = null; state.applied = null; state.request = null; state.newDay = lateDeposit.newDay;
       $('#slider').value = state.newDay; compute(2000); renderAll(); loadExplanation();
@@ -701,6 +689,7 @@ function setupSlider() {
   const show = () => { label.textContent = `${clientName} pays on day ${state.newDay} (${state.newDay - promised.day} days after the due date)`; slider.value = state.newDay; };
   show();
   slider.addEventListener('input', () => {
+    if (state.paid) state.paid = null;
     state.newDay = Number(slider.value);
     document.querySelectorAll('.scenario-btn').forEach((b) => b.classList.remove('active'));
     show();
@@ -720,6 +709,7 @@ function setupSlider() {
 }
 
 function applyScenario(key) {
+  if (state.paid) state.paid = null;
   const sc = SCENARIOS[key];
   if (!sc) return;
   state.scenario = key;

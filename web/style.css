@@ -160,66 +160,8 @@ main { max-width: 1320px; margin: 0 auto; padding: 0 32px 24px; }
 .collect { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--rule, #d5d9d2); }
 .collect h3 { margin: 0 0 4px; font-size: 1rem; }
 .collect p { margin: 0 0 12px; color: var(--muted, #55656e); }
-/* Post-Settlement Continuous Sentinel Card */
-.settled-card {
-  background: #ffffff;
-  border: 1px solid #d8cfd0;
-  border-left: 4px solid #237a5b;
-  border-radius: 8px;
-  padding: 24px 28px;
-  box-shadow: 0 2px 12px rgba(35, 122, 91, 0.05);
-}
-.settled-badge {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: #237a5b;
-  background: #eaf5f0;
-  border: 1px solid #c0e2d3;
-  padding: 3px 10px;
-  border-radius: 99px;
-  margin-bottom: 10px;
-}
-.settled-header h2 { color: #413f3d; font-size: 22px; margin-bottom: 6px; }
-.settled-header p { color: #697184; font-size: 14.5px; line-height: 1.5; }
-.settled-header code { background: #f2f1ef; padding: 2px 6px; border-radius: 4px; font-size: 12px; color: #413f3d; }
-
-.horizon-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-  margin: 20px 0;
-}
-.horizon-tile {
-  padding: 12px 16px;
-  background: #f2f1ef;
-  border: 1px solid #d8cfd0;
-  border-radius: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.horizon-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: #697184; }
-.horizon-tile b { color: #413f3d; font-size: 13.5px; }
-.horizon-tile small { color: #697184; font-size: 11.5px; }
-.horizon-tile small.good { color: #237a5b; font-weight: 600; }
-.horizon-tile small.warn { color: #b88117; font-weight: 600; }
-
-.settled-ai-insight {
-  margin: 18px 0;
-  padding: 16px 20px;
-  background: #faf9f8;
-  border: 1px solid #d8cfd0;
-  border-radius: 6px;
-}
-.settled-ai-insight h3 { font-size: 14.5px; color: #413f3d; margin-bottom: 8px; }
-.settled-ai-insight ul { margin: 0; padding-left: 20px; }
-.settled-ai-insight li { margin: 6px 0; font-size: 13.5px; color: #413f3d; line-height: 1.5; }
-.settled-ai-insight strong { color: #413f3d; }
-
-.settled-actions { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
-body.paid .plans { display: none; }
+/* Keep plans and simulation visible so the user can inspect trade-offs and test continuous risk */
+body.paid .plans-note::after { content: ' (Deposit currently marked as settled)'; color: var(--received); font-weight: 600; }
 
 @media (max-width: 700px) {
   #cash { overflow-x: auto; }
