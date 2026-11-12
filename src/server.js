@@ -73,24 +73,35 @@ function publicOrigin(req) {
 }
 
 // The amount and the payment id come from the server's own data, never from the browser.
-export async function createPaymentRequest(origin, paymentId = lateDeposit.paymentId) {
+// If Plan D is approved, the discounted amount is requested from PayPal.
+export async function createPaymentRequest(origin, paymentId = lateDeposit.paymentId, planKey = null) {
   const payment = agency.payments.find((p) => p.id === paymentId);
   if (!payment) throw new Error('unknown payment');
   if (!clientId || !secret) throw new Error('PayPal keys are not set');
+
+  let amount = payment.amount;
+  let desc = payment.label ?? paymentId;
+
+  if (planKey === 'D' && agency.earlyPayOffer) {
+    const discount = Math.round((payment.amount * agency.earlyPayOffer.pct) / 100);
+    amount = payment.amount - discount;
+    desc = `${payment.label ?? paymentId} (Plan D: ${agency.earlyPayOffer.pct}% early-payment discount)`;
+  }
+
   const token = await paypalToken();
   const res = await fetch(PAYPAL_BASE + '/v2/checkout/orders', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'PayPal-Request-Id': `req-${paymentId}-${Date.now()}` },
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'PayPal-Request-Id': `req-${paymentId}-${planKey || 'std'}-${Date.now()}` },
     body: JSON.stringify({
       intent: 'CAPTURE',
-      purchase_units: [{ custom_id: paymentId, description: payment.label ?? paymentId, amount: { currency_code: 'USD', value: payment.amount.toFixed(2) } }],
+      purchase_units: [{ custom_id: paymentId, description: desc, amount: { currency_code: 'USD', value: amount.toFixed(2) } }],
       payment_source: { paypal: { experience_context: { shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW', return_url: origin + '/paypal/return', cancel_url: origin + '/?cancelled=1' } } },
     }),
   });
   const order = await res.json();
   if (!res.ok) throw new Error('PayPal order failed: ' + JSON.stringify(order).slice(0, 300));
   const link = order.links.find((l) => l.rel === 'payer-action' || l.rel === 'approve');
-  return { orderId: order.id, approveUrl: link.href };
+  return { orderId: order.id, approveUrl: link.href, amount };
 }
 
 async function captureOrder(orderId) {
@@ -136,27 +147,27 @@ async function askGemini(prompt, { timeoutMs = 12000 } = {}) {
   throw err;
 }
 
-export async function explain(input) {
-  const key = JSON.stringify(input);
+export async function explain(input, tone = 'diplomatic') {
+  const key = JSON.stringify({ input, tone });
   if (explainCache.has(key)) return { ...explainCache.get(key), cached: true };
   let result;
   if (!geminiKey) {
-    result = { ...templateExplanation(input), reason: 'GEMINI_API_KEY is not set' };
+    result = { ...templateExplanation(input, tone), reason: 'GEMINI_API_KEY is not set' };
   } else {
-    const prompt = buildPrompt(input);
+    const prompt = buildPrompt(input, tone);
     const log = [];
     for (let attempt = 0; attempt < 2 && !result; attempt++) {
       try {
         const { model, out, failures } = await askGemini(prompt);
         log.push(...failures);
         const problems = validateExplanation(out, input);
-        if (problems.length === 0) result = { ...out, source: 'gemini', model };
+        if (problems.length === 0) result = { ...out, source: 'gemini', model, tone };
         else log.push(`${model}: rejected (${problems.join('; ')})`); // the model invented a number: ask again
       } catch (e) {
         log.push(...(e.failures ?? [e.message]));
       }
     }
-    if (!result) result = { ...templateExplanation(input), reason: log.join(' | ') };
+    if (!result) result = { ...templateExplanation(input, tone), reason: log.join(' | ') };
   }
   if (explainCache.size > 200) explainCache.clear();
   explainCache.set(key, result);
@@ -212,15 +223,60 @@ export const server = http.createServer(async (req, res) => {
     try {
       const input = JSON.parse(await readBody(req, 200000));
       if (!input?.plans || !input?.facts) return send(res, 400, 'expected {facts, plans}');
-      return send(res, 200, await explain(input));
+      return send(res, 200, await explain(input, input.tone || 'diplomatic'));
     } catch (e) {
       return send(res, 400, 'bad request: ' + e.message);
     }
   }
 
   if (req.method === 'POST' && url.pathname === '/api/payment-request') {
-    try { const r = await createPaymentRequest(publicOrigin(req)); ledger.requested(lateDeposit.paymentId, r.orderId); return send(res, 200, r); }
+    try {
+      const body = JSON.parse((await readBody(req, 10000)) || '{}');
+      const planKey = body.planKey || null;
+      const paymentId = body.paymentId || lateDeposit.paymentId;
+      const r = await createPaymentRequest(publicOrigin(req), paymentId, planKey);
+      ledger.requested(paymentId, r.orderId, r.amount);
+      return send(res, 200, r);
+    }
     catch (e) { return send(res, 502, e.message); }
+  }
+
+  // Demo fallback / sandbox simulator: generates a verified capture event in the ledger
+  if (req.method === 'POST' && url.pathname === '/api/simulate-payment') {
+    try {
+      const body = JSON.parse((await readBody(req, 10000)) || '{}');
+      const paymentId = body.paymentId || lateDeposit.paymentId;
+      const payment = agency.payments.find((p) => p.id === paymentId);
+      const isPlanD = body.planKey === 'D';
+      const discount = isPlanD && agency.earlyPayOffer ? Math.round((payment.amount * agency.earlyPayOffer.pct) / 100) : 0;
+      const amount = payment.amount - discount;
+      
+      const mockEvent = {
+        id: `sim-capture-${Date.now()}`,
+        event_type: 'PAYMENT.CAPTURE.COMPLETED',
+        resource: {
+          custom_id: paymentId,
+          amount: { currency_code: 'USD', value: amount.toFixed(2) },
+        },
+      };
+      
+      ledger.setExpected(paymentId, amount);
+      const result = ledger.receive(mockEvent, 'SUCCESS');
+      const record = {
+        receivedAt: new Date().toISOString(),
+        id: mockEvent.id,
+        type: mockEvent.event_type,
+        custom_id: paymentId,
+        amount: amount.toFixed(2),
+        signature: 'SUCCESS (Simulated sandbox capture)',
+        outcome: result.outcome,
+      };
+      events.unshift(record);
+      if (events.length > 100) events.pop();
+      return send(res, 200, { ok: true, record });
+    } catch (e) {
+      return send(res, 400, 'simulation error: ' + e.message);
+    }
   }
 
   // PayPal sends the buyer back here after approval; capturing the order is what actually moves the money.

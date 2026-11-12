@@ -39,6 +39,14 @@ const state = {
   paid: null,        // the PayPal event that settled the deposit
   dismissed: new Set(), // events the user chose to replay past
   request: null,     // 'creating' | 'opened' | error text
+  tone: 'diplomatic', // 'diplomatic' | 'firm' | 'urgent'
+  scenario: 'baseline',
+};
+
+const SCENARIOS = {
+  baseline: { label: 'Acme 10d late (Day 15)', day: 15, startingCash: 2000 },
+  severe: { label: 'Critical (Day 25)', day: 25, startingCash: 2000 },
+  low_cash: { label: 'Low reserves ($1k)', day: 15, startingCash: 1000 },
 };
 
 /* ---------- compute (engine runs in the browser) ---------- */
@@ -506,7 +514,17 @@ function renderAssess() {
     <h2>${esc(ex.headline)}</h2>
     <ul>${ex.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>
     <p class="alt">${esc(ex.when_to_pick_another)}</p>
-    <div class="message"><h3>Message to ${esc(clientName)}, ready to send</h3><p id="msg">${esc(ex.client_message)}</p></div>
+    <div class="message">
+      <div class="message-head">
+        <h3>Message to ${esc(clientName)}</h3>
+        <div class="tone-picker" role="radiogroup" aria-label="Tone">
+          <button type="button" class="tone-btn ${state.tone === 'diplomatic' ? 'active' : ''}" data-tone="diplomatic">Diplomatic</button>
+          <button type="button" class="tone-btn ${state.tone === 'firm' ? 'active' : ''}" data-tone="firm">Firm</button>
+          <button type="button" class="tone-btn ${state.tone === 'urgent' ? 'active' : ''}" data-tone="urgent">Urgent</button>
+        </div>
+      </div>
+      <p id="msg">${esc(ex.client_message)}</p>
+    </div>
     <div class="actions">
       <button class="btn" id="approve" type="button" ${isApplied ? 'disabled' : ''}>${isApplied ? `Plan ${ex.recommended_plan} approved` : `Approve Plan ${ex.recommended_plan}`}</button>
       <button class="btn ghost" id="copy" type="button">Copy message</button>
@@ -515,6 +533,15 @@ function renderAssess() {
     ${state.applied ? collectBox() : ''}
     ${src}`;
   $('#collect')?.addEventListener('click', requestPayment);
+  $('#sim-pay')?.addEventListener('click', simulatePayment);
+  el.querySelectorAll('.tone-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      const t = e.currentTarget.dataset.tone;
+      if (state.tone === t) return;
+      state.tone = t;
+      loadExplanation();
+    });
+  });
   $('#approve')?.addEventListener('click', () => {
     state.applied = ex.recommended_plan;
     state.selected = ex.recommended_plan;
@@ -531,17 +558,33 @@ function renderAssess() {
 }
 
 function collectBox() {
+  const isPlanD = state.applied === 'D';
+  const plan = state.plans[state.applied];
+  const targetAmount = isPlanD && plan?.offer ? plan.offer.amount : promised.amount;
+  const discountText = isPlanD && plan?.offer ? ` (includes 3% early-pay discount: -$${plan.offer.discount})` : '';
+
   const note = state.request === 'creating' ? 'Creating the PayPal payment link&hellip;'
     : state.request === 'opened' ? 'PayPal opened in a new tab. Pay with the sandbox buyer account. This page updates when PayPal confirms the payment.'
-    : state.request ? esc(state.request) : `Creates a PayPal payment link for ${usd(promised.amount)}. Sandbox only, no real money.`;
-  return `<div class="collect"><h3>Collect the ${esc(clientName)} deposit</h3><p id="collect-note">${note}</p>
-    <button class="btn" id="collect" type="button" ${state.request === 'creating' ? 'disabled' : ''}>Get paid with PayPal</button></div>`;
+    : state.request ? esc(state.request) : `Creates a PayPal payment link for ${usd(targetAmount)}${discountText}. Sandbox only.`;
+
+  return `<div class="collect">
+    <h3>Collect the ${esc(clientName)} deposit</h3>
+    <p id="collect-note">${note}</p>
+    <div class="actions">
+      <button class="btn" id="collect" type="button" ${state.request === 'creating' ? 'disabled' : ''}>Get paid with PayPal (${usd(targetAmount)})</button>
+      <button class="btn ghost" id="sim-pay" type="button" title="Test instant signed webhook without leaving the page">Simulate Sandbox Webhook</button>
+    </div>
+  </div>`;
 }
 
 async function requestPayment() {
   state.request = 'creating'; renderAssess();
   try {
-    const res = await fetch('/api/payment-request', { method: 'POST' });
+    const res = await fetch('/api/payment-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentId: PAYMENT, planKey: state.applied }),
+    });
     if (!res.ok) throw new Error(await res.text());
     const { approveUrl } = await res.json();
     state.request = 'opened';
@@ -550,6 +593,23 @@ async function requestPayment() {
     state.request = 'Could not create the PayPal link: ' + String(e.message).slice(0, 160);
   }
   renderAssess();
+}
+
+async function simulatePayment() {
+  state.request = 'creating'; renderAssess();
+  try {
+    const res = await fetch('/api/simulate-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentId: PAYMENT, planKey: state.applied }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    state.request = null;
+    await pollEvents();
+  } catch (e) {
+    state.request = 'Simulation error: ' + String(e.message);
+    renderAssess();
+  }
 }
 
 function logDecision(kind, detail) {
@@ -563,21 +623,25 @@ async function loadExplanation() {
   renderAssess();
   let result;
   try {
-    const res = await fetch('/api/explain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state.input) });
+    const res = await fetch('/api/explain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...state.input, tone: state.tone }),
+    });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     result = await res.json();
   } catch {
-    result = templateExplanation(state.input);
+    result = templateExplanation(state.input, state.tone);
   }
   if (token !== explainToken) return; // a newer date was chosen while this was loading
-  if (validateExplanation(result, state.input).length) result = templateExplanation(state.input);
+  if (validateExplanation(result, state.input).length) result = templateExplanation(state.input, state.tone);
   state.explanation = result;
   renderPlans();
   renderCompare();
   renderAssess();
 }
 
-/* ---------- what-if ---------- */
+/* ---------- what-if & scenarios ---------- */
 
 let debounce;
 function setupSlider() {
@@ -587,14 +651,35 @@ function setupSlider() {
   show();
   slider.addEventListener('input', () => {
     state.newDay = Number(slider.value);
+    document.querySelectorAll('.scenario-btn').forEach((b) => b.classList.remove('active'));
     show();
     clearTimeout(debounce);
     debounce = setTimeout(() => { compute(800); renderAll(); loadExplanation(); }, 350);
   });
-  $('#reset').addEventListener('click', () => {
-    state.newDay = lateDeposit.newDay; show();
-    compute(2000); renderAll(); loadExplanation();
+  $('#reset')?.addEventListener('click', () => {
+    applyScenario('baseline');
   });
+
+  document.querySelectorAll('.scenario-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      const sc = e.currentTarget.dataset.scenario;
+      applyScenario(sc);
+    });
+  });
+}
+
+function applyScenario(key) {
+  const sc = SCENARIOS[key];
+  if (!sc) return;
+  state.scenario = key;
+  agency.startingCash = sc.startingCash;
+  state.newDay = sc.day;
+  document.querySelectorAll('.scenario-btn').forEach((b) => b.classList.toggle('active', b.dataset.scenario === key));
+  $('#slider').value = state.newDay;
+  $('#slider-label').textContent = `${clientName} pays on day ${state.newDay} (${state.newDay - promised.day} days after the due date)`;
+  compute(2000);
+  renderAll();
+  loadExplanation();
 }
 
 /* ---------- live PayPal events ---------- */

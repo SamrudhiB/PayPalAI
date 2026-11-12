@@ -5,7 +5,13 @@
 
 const LETTERS = ['A', 'B', 'C', 'D'];
 
-export function buildPrompt(input) {
+export function buildPrompt(input, tone = 'diplomatic') {
+  const toneGuide = {
+    diplomatic: 'Tone: Warm, collaborative, relationship-preserving reminder.',
+    firm: 'Tone: Direct, contractual, reminding the client that work remains paused until payment clears.',
+    urgent: 'Tone: Urgent, emphasizing imminent payroll deadlines and severe delivery slip.'
+  }[tone] || 'Tone: Warm, collaborative reminder.';
+
   return `You are the decision assistant for a small agency owner. A client payment is late.
 Below are the recovery plans, already computed by deterministic code, with risk from simulation.
 
@@ -15,9 +21,10 @@ Rules:
 - A plan with client_accepts_offer_pct only works if the client accepts; its other figures assume they accept, so weigh them with that chance.
 - Plans marked dominated_by_plan are strictly worse than the plan named there; say so if relevant.
 - Write for a busy business owner: plain words, no jargon.
+- Client message requirement: ${toneGuide}
 
 Return JSON with exactly these keys:
-{"recommended_plan":"A"|"B"|"C"|"D" (one of the plan letters in the data),"headline":"one sentence","reasons":["2-3 short sentences"],"when_to_pick_another":"one sentence naming the other plan and the situation that favours it","client_message":"a short, friendly but firm payment reminder to the client, no new numbers beyond the amount and dates in the data"}
+{"recommended_plan":"A"|"B"|"C"|"D" (one of the plan letters in the data),"headline":"one sentence","reasons":["2-3 short sentences"],"when_to_pick_another":"one sentence naming the other plan and the situation that favours it","client_message":"a reminder to the client matching the requested tone, with no new numbers beyond the amount and dates in the data"}
 
 DATA:
 ${JSON.stringify(input, null, 2)}`;
@@ -45,7 +52,7 @@ export function validateExplanation(out, input) {
 const usd = (n) => (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('en-US');
 
 // Choose by rule: lowest chance of missing payroll, then lowest chance of unpaid work, then earliest finish.
-export function templateExplanation(input) {
+export function templateExplanation(input, tone = 'diplomatic') {
   const entries = Object.entries(input.plans);
   const score = ([, p]) => [
     p.chance_of_missing_payroll_pct ?? 100,
@@ -70,6 +77,13 @@ export function templateExplanation(input) {
   for (const [k, p] of others) {
     if (p.dominated_by_plan === bestKey) reasons.push(`Plan ${k} (${p.name}) is worse than Plan ${bestKey} on every measure.`);
   }
+
+  const clientMessages = {
+    diplomatic: `Hi ${lp.client} team, a quick heads-up: the ${usd(lp.amount)} payment for "${lp.label}" was due on day ${lp.expected_day} and is now expected on day ${lp.new_expected_day}. We have planned around the delay, but the schedule depends on this payment. Could you confirm the date it will arrive? Thanks for your help.`,
+    firm: `Hello ${lp.client} team, regarding the ${usd(lp.amount)} invoice for "${lp.label}": it was due on day ${lp.expected_day} and is scheduled for day ${lp.new_expected_day}. Per our schedule, dependent work cannot start until funds clear. Please ensure timely payment so we can proceed without further delay.`,
+    urgent: `URGENT: ${lp.client} team, the ${usd(lp.amount)} payment for "${lp.label}" is ${lp.days_late} days late (due day ${lp.expected_day}). Our upcoming payroll and project delivery depend strictly on this payment arriving by day ${lp.new_expected_day}. Please confirm release of funds immediately.`
+  };
+
   return {
     recommended_plan: bestKey,
     headline: `Go with Plan ${bestKey}: ${best.name}.`,
@@ -79,10 +93,9 @@ export function templateExplanation(input) {
         ? `Pick Plan ${alt[0]} (${alt[1].name}) if protecting a deadline matters more than protecting cash.`
         : `Pick Plan ${alt[0]} (${alt[1].name}) if you prefer its trade-off to Plan ${bestKey}.`)
       : 'No other plan is worth considering.',
-    client_message:
-      `Hi ${lp.client} team, a quick heads-up: the ${usd(lp.amount)} payment for "${lp.label}" was due on day ${lp.expected_day} and is now expected on day ${lp.new_expected_day}. ` +
-      `We have planned around the delay, but the schedule depends on this payment. Could you confirm the date it will arrive? Thanks for your help.`,
+    client_message: clientMessages[tone] || clientMessages.diplomatic,
     source: 'template',
+    tone,
   };
 }
 

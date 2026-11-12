@@ -18,10 +18,17 @@ export function createLedger(paymentIds, { now = () => new Date().toISOString(),
   const state = Object.fromEntries(paymentIds.map((id) => [id, 'pending']));
   const seen = new Set();
   const audit = [];
+  const expectedMap = { ...expected };
   const log = (kind, detail, extra = {}) => audit.unshift({ at: now(), kind, detail, ...extra });
 
-  function requested(paymentId, orderId) {
-    log('payment_requested', `PayPal payment link created for ${paymentId}`, { paymentId, orderId });
+  function setExpected(paymentId, amount) {
+    expectedMap[paymentId] = amount;
+    log('payment_terms_updated', `Expected payment for ${paymentId} set to $${amount.toFixed(2)} USD`, { paymentId, amount });
+  }
+
+  function requested(paymentId, orderId, amount) {
+    if (amount !== undefined) expectedMap[paymentId] = amount;
+    log('payment_requested', `PayPal payment link created for ${paymentId}${amount !== undefined ? ` ($${Number(amount).toFixed(2)})` : ''}`, { paymentId, orderId, amount });
   }
 
   // verification: 'SUCCESS' | anything else (rejected). Returns what the server should answer and whether the schedule may change.
@@ -44,10 +51,10 @@ export function createLedger(paymentIds, { now = () => new Date().toISOString(),
       return { status: 200, outcome: 'ignored', changed: false };
     }
     const next = EVENT_STATE[type];
-    if (next === 'paid' && customId in expected) {
+    if (next === 'paid' && customId in expectedMap) {
       const amt = event.resource?.amount;
-      if (!amt || Number(amt.value) !== expected[customId] || (amt.currency_code && amt.currency_code !== 'USD')) {
-        log('event_rejected', `${type} for ${customId} has the wrong amount (${amt?.value ?? 'none'} ${amt?.currency_code ?? ''}, expected ${expected[customId]} USD)`, base);
+      if (!amt || Number(amt.value) !== expectedMap[customId] || (amt.currency_code && amt.currency_code !== 'USD')) {
+        log('event_rejected', `${type} for ${customId} has the wrong amount (${amt?.value ?? 'none'} ${amt?.currency_code ?? ''}, expected ${expectedMap[customId]} USD)`, base);
         return { status: 200, outcome: 'amount_mismatch', changed: false };
       }
     }
@@ -72,5 +79,5 @@ export function createLedger(paymentIds, { now = () => new Date().toISOString(),
 
   function decision(kind, detail) { log(kind, detail); }
 
-  return { requested, receive, decision, state: () => ({ ...state }), audit: () => audit.slice(0, 200) };
+  return { requested, receive, decision, setExpected, state: () => ({ ...state }), audit: () => audit.slice(0, 200) };
 }

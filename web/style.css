@@ -203,3 +203,17 @@ body.paid .decide { grid-template-columns: 1fr; }
 .cmp-best { font-weight: 700; }
 .cmp-star { color: var(--hold); font-size: 11px; }
 @media (max-width: 700px) { .cmp-head { flex-direction: column; gap: 2px; } .cmp-head p { text-align: left; } }
+
+/* ---- Message Tone Picker ---- */
+.message-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.tone-picker { display: flex; gap: 4px; }
+.tone-btn { all: unset; cursor: pointer; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--rule); color: var(--slate); background: #fff; transition: all .15s; }
+.tone-btn:hover { background: #f0f4f1; color: var(--ink); }
+.tone-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+/* ---- Scenario Buttons ---- */
+.scenarios-box { margin-bottom: 12px; }
+.scenario-buttons { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.scenario-btn { all: unset; cursor: pointer; font-size: 13px; font-weight: 600; padding: 8px 12px; border-radius: var(--radius); border: 1px solid var(--rule); background: #fff; color: var(--ink); transition: all .15s; text-align: left; }
+.scenario-btn:hover { background: #f0f4f1; border-color: #bcc6be; }
+.scenario-btn.active { background: #eaf0ec; border-color: var(--received); color: var(--received); outline: 1px solid var(--received); }

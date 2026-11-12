@@ -48,12 +48,20 @@
       <section class="decide" aria-label="Assessment and approval">
         <div class="assess" id="assess"></div>
         <aside class="whatif">
-          <h2>What if Acme pays later or sooner?</h2>
+          <div class="scenarios-box">
+            <h2>Crisis scenarios</h2>
+            <div class="scenario-buttons">
+              <button type="button" class="scenario-btn active" data-scenario="baseline">Acme 10d late (Day 15)</button>
+              <button type="button" class="scenario-btn" data-scenario="severe">Critical (Day 25)</button>
+              <button type="button" class="scenario-btn" data-scenario="low_cash">Low reserves ($1k)</button>
+            </div>
+          </div>
+          <h2 style="margin-top: 20px;">What-if date slider</h2>
           <label for="slider" id="slider-label"></label>
           <input id="slider" type="range" min="6" max="40" step="1" />
           <div class="slider-scale"><span>day 6</span><span>day 40</span></div>
           <p class="hint">Every number on this page is recomputed from the chosen date. The AI only explains the result.</p>
-          <button class="link" id="reset" type="button">Back to the promised date</button>
+          <button class="link" id="reset" type="button">Reset to default scenario</button>
         </aside>
       </section>
 
