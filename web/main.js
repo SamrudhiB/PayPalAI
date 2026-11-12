@@ -181,6 +181,10 @@ function renderPlans() {
         <dt>${plan.offer ? `Lowest cash, if ${esc(clientName)} accepts` : 'Lowest cash, if paid on the promised date'}</dt><dd class="${plan.lowestCash < 0 ? 'bad' : ''}">${usd(plan.lowestCash)}</dd>
         ${plan.offer ? `<dt>Chance ${esc(clientName)} accepts (assumed)</dt><dd>${Math.round(plan.offer.acceptProb * 100)}%</dd>` : ''}
         <dt>Unpaid-work risk</dt><dd class="${plan.unpaidWorkDays ? 'warn' : ''}">${plan.unpaidWorkDays ? `${plan.unpaidWorkDays} days, ${pct(r.pUnpaidWork)}% chance` : 'none'}</dd>
+        <div class="facts-divider">Simulated (2,000 futures)</div>
+        <dt>Acme on time</dt><dd class="${pct(r.pOnTime.acme) === 100 ? 'good' : pct(r.pOnTime.acme) === 0 ? 'bad' : 'warn'}">${pct(r.pOnTime.acme)}%</dd>
+        <dt>Brightly on time</dt><dd class="${pct(r.pOnTime.brightly) === 100 ? 'good' : pct(r.pOnTime.brightly) === 0 ? 'bad' : 'warn'}">${pct(r.pOnTime.brightly)}%</dd>
+        <dt>Worst-case cash (1-in-20)</dt><dd class="${r.lowestCashP5 < 0 ? 'bad' : ''}">${usd(r.lowestCashP5)}</dd>
       </dl>`;
     btn.addEventListener('click', () => select(key));
     host.appendChild(btn);
@@ -191,6 +195,94 @@ function select(key) {
   state.selected = key;
   renderPlans();
   renderBoard();
+}
+
+/* ---------- plan comparison table ---------- */
+
+function renderCompare() {
+  const el = $('#compare');
+  if (!el) return;
+  if (!state.plans || !state.risk) { el.innerHTML = ''; return; }
+
+  const entries = Object.entries(state.plans);
+  const keys = entries.map(([k]) => k);
+  const rec = state.explanation?.recommended_plan;
+
+  const metrics = [
+    {
+      label: 'Payroll miss chance',
+      get: (k) => state.risk[k].pMissPayroll,
+      fmt: (v) => pct(v) + '%',
+      best: 'low',
+      cls: (v) => v >= 0.67 ? 'bad' : v >= 0.15 ? 'warn' : 'good',
+    },
+    {
+      label: 'Acme website — on time',
+      get: (k) => state.risk[k].pOnTime.acme,
+      fmt: (v) => pct(v) + '%',
+      best: 'high',
+      cls: (v) => v >= 1 ? 'good' : v > 0 ? 'warn' : 'bad',
+    },
+    {
+      label: 'Brightly app — on time',
+      get: (k) => state.risk[k].pOnTime.brightly,
+      fmt: (v) => pct(v) + '%',
+      best: 'high',
+      cls: (v) => v >= 1 ? 'good' : v > 0 ? 'warn' : 'bad',
+    },
+    {
+      label: 'Lowest cash (if paid on date)',
+      get: (k) => state.plans[k].lowestCash,
+      fmt: (v) => usd(v),
+      best: 'high',
+      cls: (v) => v < 0 ? 'bad' : '',
+    },
+    {
+      label: 'Worst-case cash (1-in-20 futures)',
+      get: (k) => state.risk[k].lowestCashP5,
+      fmt: (v) => usd(v),
+      best: 'high',
+      cls: (v) => v < 0 ? 'bad' : '',
+    },
+    {
+      label: 'Unpaid work risk',
+      get: (k) => state.risk[k].pUnpaidWork,
+      fmt: (v) => v === 0 ? 'None' : pct(v) + '%',
+      best: 'low',
+      cls: (v) => v > 0 ? 'warn' : 'good',
+    },
+  ];
+
+  const findBest = (m) => keys.reduce((best, k) => {
+    const bv = m.get(best), kv = m.get(k);
+    return m.best === 'low' ? (kv < bv ? k : best) : (kv > bv ? k : best);
+  });
+
+  const thead = `<thead><tr>
+    <th class="cmp-label"></th>
+    ${entries.map(([k, p]) => `<th class="cmp-plan${k === state.selected ? ' cmp-sel' : ''}${k === rec ? ' cmp-rec' : ''}">
+      <span class="cmp-pkey">Plan ${esc(k)}</span>
+      <span class="cmp-pname">${esc(p.name)}</span>
+    </th>`).join('')}
+  </tr></thead>`;
+
+  const tbody = `<tbody>${metrics.map((m) => {
+    const best = findBest(m);
+    return `<tr>
+      <th class="cmp-label">${esc(m.label)}</th>
+      ${keys.map((k) => {
+        const v = m.get(k);
+        const isBest = k === best;
+        return `<td class="cmp-val ${m.cls(v)}${isBest ? ' cmp-best' : ''}${k === state.selected ? ' cmp-sel' : ''}${k === rec ? ' cmp-rec' : ''}">${m.fmt(v)}${isBest ? '<span class="cmp-star" title="Best on this metric"> ★</span>' : ''}</td>`;
+      }).join('')}
+    </tr>`;
+  }).join('')}</tbody>`;
+
+  el.innerHTML = `<div class="cmp-head">
+    <h3>Plan comparison</h3>
+    <p>All percentages from 2,000 simulated futures.&nbsp; ★&nbsp;= best on this metric.</p>
+  </div>
+  <div class="cmp-scroll"><table class="cmp-table">${thead}${tbody}</table></div>`;
 }
 
 /* ---------- Gantt ---------- */
@@ -345,6 +437,18 @@ function renderCash() {
   const lowLabel = lowCash < 0
     ? `<circle cx="${X(low)}" cy="${Y(lowCash)}" r="4.5" fill="#c4314b"/><text class="low" x="${X(low) + (low <= agency.today + 2 ? 10 : -10)}" y="${Y(lowCash) + (low <= agency.today + 2 ? -10 : 4)}" text-anchor="${low <= agency.today + 2 ? 'start' : 'end'}" style="fill:#c4314b">${usd(lowCash)} on day ${low}</text>`
     : `<circle cx="${X(low)}" cy="${Y(lowCash)}" r="4.5" fill="#12222b"/><text class="low" x="${X(low) + (low <= agency.today + 2 ? 10 : -10)}" y="${Y(lowCash) + (low <= agency.today + 2 ? -10 : 4)}" text-anchor="${low <= agency.today + 2 ? 'start' : 'end'}" style="fill:#12222b">${usd(lowCash)} on day ${low}</text>`;
+  // Deposit arrival marker: a green dashed vertical with label near top of chart
+  const depositMark = (() => {
+    if (state.paid || state.newDay > maxDay) return '';
+    const xp = X(state.newDay).toFixed(1);
+    const tx = (parseFloat(xp) + 6).toFixed(1);
+    // Flip label to left side when deposit is in the last 20% of the chart
+    const anchor = state.newDay > maxDay * 0.78 ? 'end' : 'start';
+    const txFlipped = anchor === 'end' ? (parseFloat(xp) - 6).toFixed(1) : tx;
+    return `<line x1="${xp}" x2="${xp}" y1="${T}" y2="${H - B}" stroke="#1e7b61" stroke-width="1.5" stroke-dasharray="5 3"/>`
+      + `<text x="${txFlipped}" y="${T + 14}" fill="#1e7b61" style="fill:#1e7b61;font-weight:600" text-anchor="${anchor}">Deposit arrives</text>`
+      + `<text x="${txFlipped}" y="${T + 27}" fill="#1e7b61" style="fill:#1e7b61;font-weight:600" text-anchor="${anchor}">day ${state.newDay}</text>`;
+  })();
   $('#cash').innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Cash balance by day for Plan ${state.selected}. Lowest cash from today ${usd(lowCash)} on day ${low}.">
       <defs>
@@ -358,6 +462,7 @@ function renderCash() {
       <path d="${line}" fill="none" stroke="#12222b" stroke-width="2.4" clip-path="url(#above)"/>
       <path d="${line}" fill="none" stroke="#c4314b" stroke-width="2.8" clip-path="url(#below)"/>
       ${dayMark(agency.today, 'today', '#2f5d7c')}
+      ${depositMark}
       ${lowLabel}
     </svg>`;
   $('#cash-note').textContent = `Solid line: Plan ${state.selected}, if ${clientName} pays on day ${state.newDay}. Dashed line: if ${clientName} had paid on day ${promised.day}.`;
@@ -468,6 +573,7 @@ async function loadExplanation() {
   if (validateExplanation(result, state.input).length) result = templateExplanation(state.input);
   state.explanation = result;
   renderPlans();
+  renderCompare();
   renderAssess();
 }
 
@@ -520,6 +626,7 @@ function renderAll() {
   document.body.classList.toggle('paid', !!state.paid);
   renderBanner();
   renderPlans();
+  renderCompare();
   renderOverview();
   renderBoard();
   if (state.explanation || state.paid) renderAssess();
@@ -529,6 +636,7 @@ compute(2000);
 renderBanner();
 renderOverview();
 renderPlans();
+renderCompare();
 createGantt();
 renderBoard();
 setupSlider();

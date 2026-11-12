@@ -170,3 +170,36 @@ body.paid .decide { grid-template-columns: 1fr; }
 
 .gantt-host .b-task-baseline { background-color: #aab6bd; border: 0; opacity: .85; }
 .sw.base { background: #aab6bd; }
+
+/* ---- Facts: simulated section divider inside a plan card DL ---- */
+.facts-divider {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--slate);
+}
+
+/* ---- Plan comparison table ---- */
+.cmp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 24px; margin: 20px 0 8px; }
+.cmp-head h3 { font-size: 16px; }
+.cmp-head p { color: var(--slate); font-size: 13px; text-align: right; }
+.cmp-scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: var(--radius); }
+.cmp-table { width: 100%; border-collapse: collapse; background: var(--panel); font-size: 13.5px; }
+.cmp-table th, .cmp-table td { padding: 9px 14px; border-bottom: 1px solid var(--rule); }
+.cmp-table tbody tr:last-child th,
+.cmp-table tbody tr:last-child td { border-bottom: 0; }
+.cmp-label { text-align: left; font-weight: 500; color: var(--slate); white-space: nowrap; min-width: 180px; border-right: 1px solid var(--rule); }
+.cmp-plan { text-align: center; border-left: 1px solid var(--rule); font-weight: 700; }
+.cmp-pkey { display: block; font-size: 15px; }
+.cmp-pname { display: block; font-size: 11px; font-weight: 400; color: var(--slate); line-height: 1.4; }
+.cmp-val { text-align: center; border-left: 1px solid var(--rule); font-weight: 600; }
+.cmp-sel { background: rgba(18, 34, 43, .04); }
+.cmp-rec { background: rgba(30, 123, 97, .07); }
+.cmp-best { font-weight: 700; }
+.cmp-star { color: var(--hold); font-size: 11px; }
+@media (max-width: 700px) { .cmp-head { flex-direction: column; gap: 2px; } .cmp-head p { text-align: left; } }
