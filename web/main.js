@@ -211,7 +211,14 @@ function renderPlans() {
 
 function select(key) {
   state.selected = key;
+  document.querySelectorAll('.plan-nav').forEach((btn) => {
+    const active = btn.dataset.plan === key;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', String(active));
+  });
   renderPlans();
+  renderCompare();
+  renderOverview();
   renderBoard();
 }
 
@@ -715,6 +722,24 @@ async function pollEvents() {
   }
 }
 
+/* ---------- sidebar navigation ---------- */
+
+function setupNavigation() {
+  document.querySelectorAll('.plan-nav').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      select(btn.dataset.plan);
+      $('#board').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+  document.querySelectorAll('.side-link[data-scroll]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.dataset.scroll);
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.querySelectorAll('.side-link').forEach((item) => item.classList.toggle('active', item === btn));
+    });
+  });
+}
+
 /* ---------- boot ---------- */
 
 function renderAll() {
@@ -735,6 +760,7 @@ renderCompare();
 createGantt();
 renderBoard();
 setupSlider();
+setupNavigation();
 loadExplanation();
 pollEvents();
 setInterval(pollEvents, 5000);

@@ -34,7 +34,28 @@
       </div>
     </header>
 
-    <main>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <div class="sidebar-section">
+          <div class="sidebar-label">WORKSPACE</div>
+          <button class="side-link active" type="button" data-scroll="board"><span class="side-icon">▦</span><span>Live schedule</span><span class="side-key">01</span></button>
+          <button class="side-link" type="button" data-scroll="plans"><span class="side-icon">◈</span><span>Recovery plans</span><span class="side-key">02</span></button>
+          <button class="side-link" type="button" data-scroll="compare"><span class="side-icon">⇄</span><span>Plan comparison</span><span class="side-key">03</span></button>
+          <button class="side-link" type="button" data-scroll="decide"><span class="side-icon">✓</span><span>Decision &amp; approval</span><span class="side-key">04</span></button>
+          <button class="side-link" type="button" data-scroll="whatif"><span class="side-icon">⌁</span><span>Scenario lab</span><span class="side-key">05</span></button>
+          <button class="side-link" type="button" data-scroll="activity-section"><span class="side-icon">≋</span><span>Event activity</span><span class="side-key">06</span></button>
+        </div>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-section plan-nav-section">
+          <div class="sidebar-label">SELECT A RECOVERY PLAN</div>
+          <button class="plan-nav active" type="button" data-plan="A" aria-pressed="true"><span class="plan-nav-key">A</span><span><b>Plan A</b><small>Baseline recovery</small></span><span class="plan-nav-check">●</span></button>
+          <button class="plan-nav" type="button" data-plan="B" aria-pressed="false"><span class="plan-nav-key">B</span><span><b>Plan B</b><small>Schedule adjustment</small></span><span class="plan-nav-check">●</span></button>
+          <button class="plan-nav" type="button" data-plan="C" aria-pressed="false"><span class="plan-nav-key">C</span><span><b>Plan C</b><small>Cash protection</small></span><span class="plan-nav-check">●</span></button>
+          <button class="plan-nav" type="button" data-plan="D" aria-pressed="false"><span class="plan-nav-key">D</span><span><b>Plan D</b><small>Early settlement offer</small></span><span class="plan-nav-check">●</span></button>
+        </div>
+        <div class="sidebar-status"><span class="status-pulse"></span><div><b>Engine operational</b><small>Simulation ready · 2,000 runs</small></div></div>
+      </aside>
+      <main class="workspace">
       <section class="scenario-context" aria-label="Agency scenario context">
         <div class="context-pill">Interactive Demo Scenario</div>
         <div class="context-text">
@@ -45,6 +66,20 @@
       <section class="hero" id="banner" aria-live="polite"></section>
 
       <section class="overview" id="overview" aria-label="Agency overview"></section>
+
+      <section class="board" id="board" aria-label="Schedule and cash">
+        <div class="board-head">
+          <div><div class="eyebrow">LIVE PROJECT TIMELINE</div><h2 id="board-title">Schedule</h2>
+          <p class="board-subtitle">Select a recovery plan from the left navigation to reflow tasks, dependencies and cash projections.</p></div>
+          <div class="legend" aria-label="Schedule legend">
+            <span><i class="sw late"></i>Payment late</span><span><i class="sw early"></i>Payment earlier</span>
+            <span><i class="sw risk"></i>Unpaid work</span><span><i class="sw moved"></i>Reassigned</span><span><i class="sw base"></i>Original plan</span>
+          </div>
+        </div>
+        <div class="gantt-toolbar"><span class="gantt-toolbar-label">PROJECT GANTT</span><span class="gantt-toolbar-note">Working days · Dependencies · Payment milestones</span></div>
+        <div id="gantt" class="gantt-host"></div>
+        <div class="cash-head"><h3>Cash runway</h3><p id="cash-note"></p></div><div id="cash"></div>
+      </section>
 
       <section class="plans" aria-label="Recovery plans">
         <div class="plans-head">
@@ -58,25 +93,9 @@
         <div id="compare"></div>
       </section>
 
-      <section class="board" aria-label="Schedule and cash">
-        <div class="board-head">
-          <h2 id="board-title">Schedule</h2>
-          <div class="legend" aria-hidden="true">
-            <span><i class="sw late"></i>Payment late</span>
-            <span><i class="sw early"></i>Payment earlier</span>
-            <span><i class="sw risk"></i>Work started before payment</span>
-            <span><i class="sw moved"></i>Reassigned</span>
-            <span><i class="sw base"></i>Original plan</span>
-          </div>
-        </div>
-        <div id="gantt" class="gantt-host"></div>
-        <div class="cash-head"><h3>Cash</h3><p id="cash-note"></p></div>
-        <div id="cash"></div>
-      </section>
-
-      <section class="decide" aria-label="Assessment and approval">
+      <section class="decide" id="decide" aria-label="Assessment and approval">
         <div class="assess" id="assess"></div>
-        <aside class="whatif">
+        <aside class="whatif" id="whatif">
           <div class="scenarios-box">
             <h2>Crisis scenarios</h2>
             <div class="scenario-buttons">
@@ -94,12 +113,13 @@
         </aside>
       </section>
 
-      <section class="activity" aria-label="Payment and decision activity">
+      <section class="activity" id="activity-section" aria-label="Payment and decision activity">
         <h2>Activity</h2>
         <p class="hint">Every payment event and every decision is recorded here, newest first.</p>
         <ol id="activity" class="activity-list"></ol>
       </section>
-    </main>
+      </main>
+    </div>
 
     <footer class="foot">
       <p>Schedules, cash and risk come from a deterministic engine. The AI explains them and drafts the message, and answers that use a number the engine did not produce are rejected. The agency, its projects and client payment habits are sample data. PayPal events and the activity list are live sandbox records.</p>
