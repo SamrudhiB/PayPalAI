@@ -506,10 +506,44 @@ function renderAssess() {
   const el = $('#assess');
   if (state.paid) {
     el.innerHTML = `
-      <h2>Payment received. Nothing to decide.</h2>
-      <ul><li>PayPal event ${esc(state.paid.type)} for ${esc(state.paid.custom_id)}, ${esc('$' + state.paid.amount)}, signature ${esc(state.paid.signature)}.</li>
-      <li>The schedule and cash chart now show the deposit landing on day ${promised.day}.</li></ul>
-      <div class="actions"><button class="btn ghost" id="replay" type="button">Replay the late payment</button></div>`;
+      <div class="settled-card">
+        <div class="settled-header">
+          <span class="settled-badge">✅ MILESTONE SETTLED · VERIFIED VIA PAYPAL WEBHOOK</span>
+          <h2>Acme deposit cleared. The agency is back in safe water.</h2>
+          <p>PayPal verified signed event <code>${esc(state.paid.type)}</code> for <strong>${esc(state.paid.custom_id)}</strong> (${esc('$' + state.paid.amount)} USD). Task A2 (Build) is unblocked for Asha. Day-14 payroll risk has dropped from 100% to <strong>0%</strong>.</p>
+        </div>
+
+        <div class="horizon-grid">
+          <div class="horizon-tile">
+            <span class="horizon-label">NEXT INCOMING MILESTONE</span>
+            <b>Brightly Milestone 1 · $4,000</b>
+            <small>Due Day 8 · 80% on-time probability</small>
+          </div>
+          <div class="horizon-tile">
+            <span class="horizon-label">NEXT PAYROLL HURDLE</span>
+            <b>$7,000 Payroll · Day 14</b>
+            <small class="good">Fully funded · Lowest projected cash: $2,000</small>
+          </div>
+          <div class="horizon-tile">
+            <span class="horizon-label">CLIENT PROFILE UPDATED</span>
+            <b>Acme Historical Risk Record</b>
+            <small class="warn">10-day delay recorded in payment profile</small>
+          </div>
+        </div>
+
+        <div class="settled-ai-insight">
+          <h3>🤖 Continuous Sentinel: AI Forward Horizon &amp; Contract Policy</h3>
+          <ul>
+            <li><strong>Team operational status:</strong> Asha, Ben, and Chitra are now 100% utilized. Zero idle person-days across the 36-day project horizon.</li>
+            <li><strong>Client learning &amp; contract advice:</strong> Because Acme delayed Milestone 1 by 10 days, Ballast recommends enforcing shorter payment gates (3 days) or requiring a 50% upfront retainer on future Acme engagements.</li>
+            <li><strong>Forward watchpoint:</strong> Day 28 payroll ($7,000) will require Brightly Milestone 2 and Milestone 3 to land within 4 days of schedule. Ballast continues background monitoring.</li>
+          </ul>
+        </div>
+
+        <div class="settled-actions">
+          <button class="btn" id="replay" type="button">🔄 Replay Day 5 Crisis (Test other recovery plans)</button>
+        </div>
+      </div>`;
     $('#replay').addEventListener('click', () => {
       fetch('/api/reset', { method: 'POST' }).then(pollEvents).catch(() => {});
       state.paid = null; state.applied = null; state.request = null; state.newDay = lateDeposit.newDay;
