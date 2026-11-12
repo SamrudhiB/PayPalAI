@@ -11,19 +11,48 @@
   </head>
   <body>
     <header class="top">
-      <div class="brand">Ballast</div>
-      <nav class="feed" aria-label="Live PayPal events"><span class="feed-label">PayPal sandbox</span><span id="feed">Waiting for events</span></nav>
+      <div class="brand-group">
+        <div class="brand-logo" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="5" r="3"/>
+            <line x1="12" y1="8" x2="12" y2="21"/>
+            <path d="M5 12H2a10 10 0 0 0 20 0h-3"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand">Ballast</div>
+          <div class="brand-sub">Autonomous Cash Flow &amp; Payroll Sentinel</div>
+        </div>
+      </div>
+      <div class="top-meta">
+        <span class="badge-hackathon">PayPal AI Hackathon</span>
+        <nav class="feed" aria-label="Live PayPal events">
+          <span class="live-dot" aria-hidden="true"></span>
+          <span class="feed-label">PayPal Sandbox:</span>
+          <span id="feed">Waiting for events</span>
+        </nav>
+      </div>
     </header>
 
     <main>
+      <section class="scenario-context" aria-label="Agency scenario context">
+        <div class="context-pill">Interactive Demo Scenario</div>
+        <div class="context-text">
+          <strong>The Situation:</strong> You run a 3-person dev studio (Asha, Ben, Chitra). Client <strong>Acme</strong> owes a <strong>$6,000 milestone deposit</strong> to unlock building. It is <strong>10 days overdue</strong>, and your <strong>$7,000 employee payroll</strong> is due in 9 days. Ballast uses Gemini AI &amp; Monte Carlo simulation to protect payroll, then settles payment through PayPal.
+        </div>
+      </section>
+
       <section class="hero" id="banner" aria-live="polite"></section>
 
       <section class="overview" id="overview" aria-label="Agency overview"></section>
 
       <section class="plans" aria-label="Recovery plans">
         <div class="plans-head">
-          <h2>Your options</h2>
-          <p id="plans-note">Figures marked "if on the promised date" assume Acme pays when it says it will. The percentages replay each plan against 2,000 possible futures.</p>
+          <div class="plans-title-group">
+            <h2>Compare 4 Recovery Plans</h2>
+            <span class="interactive-hint">👆 Click any card to preview its impact on schedule, cash and payroll risk</span>
+          </div>
+          <p id="plans-note">Monte Carlo simulation: 2,000 randomized futures evaluating payroll safety, deadlines, and cash reserves.</p>
         </div>
         <div class="plan-row" id="plans" role="radiogroup" aria-label="Choose a plan to preview"></div>
         <div id="compare"></div>

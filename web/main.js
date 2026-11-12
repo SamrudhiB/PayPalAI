@@ -73,14 +73,16 @@ function renderBanner() {
   if (state.paid) {
     el.classList.add('is-paid');
     el.innerHTML = `
-    <h1>${esc(clientName)} paid the ${amount} deposit. <span class="n ok">Back on track.</span></h1>
-    <p>PayPal confirmed the payment with a signed event. The deposit was ${late0()} days late. The work it was blocking can start, and cash and schedule are back to the original plan.</p>`;
+      <div class="alert-chip ok">✅ Milestone Settled · Verified via PayPal Webhook</div>
+      <h1>${esc(clientName)} paid the ${amount} deposit. <span class="n ok">Back on track.</span></h1>
+      <p>PayPal confirmed payment with a signed webhook event. The deposit was ${late0()} days late. Gated tasks are unblocked, and both schedule and cash timelines have reflowed back to the baseline.</p>`;
     return;
   }
   el.innerHTML = `
-    <h1>${esc(clientName)}&rsquo;s ${amount} deposit is <span class="n">${late} days</span> late.</h1>
-    <p>It was due on day ${promised.day} and is now promised for day ${state.newDay}. ${usd(payroll.amount)} payroll is due on day ${payroll.day}. Here is what each option does to the schedule, the cash and the risk.</p>
-    ${state.applied ? `<div class="state" role="status">Plan ${state.applied} approved. The schedule below shows the approved plan.</div>` : ''}`;
+    <div class="alert-chip">⚠️ Critical Milestone Overdue · Immediate Decision Needed</div>
+    <h1>${esc(clientName)}&rsquo;s ${amount} deposit is <span class="n">${late} days late</span>.</h1>
+    <p>Due on day ${promised.day}, now expected on day ${state.newDay}. Your team has <strong>${usd(payroll.amount)} payroll due on day ${payroll.day}</strong>. Preview the 4 recovery plans below to evaluate payroll safety, deadlines, and settle with PayPal.</p>
+    ${state.applied ? `<div class="state" role="status">Plan ${state.applied} approved. Active schedule below is synced with this plan.</div>` : ''}`;
 }
 
 /* ---------- overview: every figure is calculated from the data ---------- */
@@ -168,17 +170,25 @@ function renderPlans() {
     const r = state.risk[key];
     const acme = plan.projects.acme, bright = plan.projects.brightly;
     const payrollPct = pct(r.pMissPayroll);
+    const isSelected = state.selected === key;
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'plan';
+    btn.className = `plan${isSelected ? ' is-selected' : ''}`;
     btn.setAttribute('role', 'radio');
-    btn.setAttribute('aria-checked', String(state.selected === key));
+    btn.setAttribute('aria-checked', String(isSelected));
     btn.dataset.key = key;
     btn.innerHTML = `
+      <div class="plan-top-bar">
+        <span class="plan-select-pill ${isSelected ? 'active' : ''}">
+          <span class="plan-dot ${isSelected ? 'active' : ''}"></span>
+          ${isSelected ? 'Previewing Plan' : 'Click to preview'}
+        </span>
+        <div class="plan-tags">
+          ${rec === key ? '<span class="badge rec">AI Recommended</span>' : ''}
+          ${state.applied === key ? '<span class="badge applied">Approved</span>' : ''}
+        </div>
+      </div>
       <b class="plan-name">Plan ${key}: ${esc(plan.name)}</b>
-      <div class="plan-tags">
-        ${rec === key ? '<span class="badge rec">Recommended</span>' : ''}
-        ${state.applied === key ? '<span class="badge applied">Approved</span>' : ''}</div>
       <p class="plan-change">${esc(plan.change)}</p>
       ${sparkline(plan.cash, range, key)}
       <dl class="facts">
@@ -186,9 +196,9 @@ function renderPlans() {
         <div class="bar" aria-hidden="true"><i style="width:${payrollPct}%"></i></div>
         <dt>${esc(clientName)} delivered</dt><dd class="${acme.slip ? 'bad' : 'good'}">day ${acme.finish}${acme.slip ? ` (${acme.slip} late)` : ' (on time)'}</dd>
         <dt>Brightly delivered</dt><dd class="${bright.slip ? 'bad' : 'good'}">day ${bright.finish}${bright.slip ? ` (${bright.slip} late)` : ' (on time)'}</dd>
-        <dt>${plan.offer ? `Lowest cash, if ${esc(clientName)} accepts` : 'Lowest cash, if paid on the promised date'}</dt><dd class="${plan.lowestCash < 0 ? 'bad' : ''}">${usd(plan.lowestCash)}</dd>
-        ${plan.offer ? `<dt>Chance ${esc(clientName)} accepts (assumed)</dt><dd>${Math.round(plan.offer.acceptProb * 100)}%</dd>` : ''}
-        <dt>Unpaid-work risk</dt><dd class="${plan.unpaidWorkDays ? 'warn' : ''}">${plan.unpaidWorkDays ? `${plan.unpaidWorkDays} days, ${pct(r.pUnpaidWork)}% chance` : 'none'}</dd>
+        <dt>${plan.offer ? `Lowest cash, if ${esc(clientName)} accepts` : 'Lowest cash, if paid on date'}</dt><dd class="${plan.lowestCash < 0 ? 'bad' : ''}">${usd(plan.lowestCash)}</dd>
+        ${plan.offer ? `<dt>Chance ${esc(clientName)} accepts</dt><dd>${Math.round(plan.offer.acceptProb * 100)}%</dd>` : ''}
+        <dt>Unpaid-work risk</dt><dd class="${plan.unpaidWorkDays ? 'warn' : ''}">${plan.unpaidWorkDays ? `${plan.unpaidWorkDays} days, ${pct(r.pUnpaidWork)}%` : 'none'}</dd>
         <div class="facts-divider">Simulated (2,000 futures)</div>
         <dt>Acme on time</dt><dd class="${pct(r.pOnTime.acme) === 100 ? 'good' : pct(r.pOnTime.acme) === 0 ? 'bad' : 'warn'}">${pct(r.pOnTime.acme)}%</dd>
         <dt>Brightly on time</dt><dd class="${pct(r.pOnTime.brightly) === 100 ? 'good' : pct(r.pOnTime.brightly) === 0 ? 'bad' : 'warn'}">${pct(r.pOnTime.brightly)}%</dd>
