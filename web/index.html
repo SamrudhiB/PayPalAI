@@ -71,12 +71,38 @@
       <section class="board" id="board" aria-label="Schedule and cash">
         <div class="board-head">
           <div><div class="eyebrow">LIVE PROJECT TIMELINE</div><h2 id="board-title">Schedule</h2>
-          <p class="board-subtitle">Select a recovery plan from the left navigation to reflow tasks, dependencies and cash projections.</p></div>
+          <p class="board-subtitle">Tasks, milestones and cash runway update dynamically with every plan and scenario change.</p></div>
           <div class="legend" aria-label="Schedule legend">
             <span><i class="sw late"></i>Payment late</span><span><i class="sw early"></i>Payment earlier</span>
             <span><i class="sw risk"></i>Unpaid work</span><span><i class="sw moved"></i>Reassigned</span><span><i class="sw base"></i>Original plan</span>
           </div>
         </div>
+
+        <!-- Interactive What-If & Scenario Controls directly above the Gantt chart -->
+        <div class="board-controls-bar" id="whatif" aria-label="Simulation and what-if controls">
+          <div class="ctrl-group">
+            <span class="ctrl-label">PRESET CRISIS:</span>
+            <div class="scenario-buttons-inline">
+              <button type="button" class="scenario-btn active" data-scenario="baseline">Acme 10d late (Day 15)</button>
+              <button type="button" class="scenario-btn" data-scenario="severe">Critical (Day 25)</button>
+              <button type="button" class="scenario-btn" data-scenario="low_cash">Low reserves ($1k)</button>
+            </div>
+          </div>
+          <div class="ctrl-divider" aria-hidden="true"></div>
+          <div class="ctrl-slider-group">
+            <div class="ctrl-slider-header">
+              <span class="ctrl-label">WHAT-IF SLIDER:</span>
+              <label for="slider" id="slider-label" class="ctrl-slider-val"></label>
+              <button class="link-btn-reset" id="reset" type="button" title="Reset to default">Reset</button>
+            </div>
+            <div class="slider-wrapper">
+              <span class="slider-min">d6</span>
+              <input id="slider" type="range" min="6" max="40" step="1" />
+              <span class="slider-max">d40</span>
+            </div>
+          </div>
+        </div>
+
         <div class="gantt-toolbar"><span class="gantt-toolbar-label">PROJECT GANTT</span><span class="gantt-toolbar-note">Working days · Dependencies · Payment milestones</span></div>
         <div id="gantt" class="gantt-host"></div>
         <div class="cash-head"><h3>Cash runway</h3><p id="cash-note"></p></div><div id="cash"></div>
@@ -96,22 +122,6 @@
 
       <section class="decide" id="decide" aria-label="Assessment and approval">
         <div class="assess" id="assess"></div>
-        <aside class="whatif" id="whatif">
-          <div class="scenarios-box">
-            <h2>Crisis scenarios</h2>
-            <div class="scenario-buttons">
-              <button type="button" class="scenario-btn active" data-scenario="baseline">Acme 10d late (Day 15)</button>
-              <button type="button" class="scenario-btn" data-scenario="severe">Critical (Day 25)</button>
-              <button type="button" class="scenario-btn" data-scenario="low_cash">Low reserves ($1k)</button>
-            </div>
-          </div>
-          <h2 style="margin-top: 20px;">What-if date slider</h2>
-          <label for="slider" id="slider-label"></label>
-          <input id="slider" type="range" min="6" max="40" step="1" />
-          <div class="slider-scale"><span>day 6</span><span>day 40</span></div>
-          <p class="hint">Every number on this page is recomputed from the chosen date. The AI only explains the result.</p>
-          <button class="link" id="reset" type="button">Reset to default scenario</button>
-        </aside>
       </section>
 
       <section class="activity" id="activity-section" aria-label="Payment and decision activity">
