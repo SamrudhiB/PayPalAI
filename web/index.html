@@ -18,6 +18,8 @@
     <main>
       <section class="hero" id="banner" aria-live="polite"></section>
 
+      <section class="overview" id="overview" aria-label="Agency overview"></section>
+
       <section class="plans" aria-label="Recovery plans">
         <div class="plans-head">
           <h2>Your options</h2>
@@ -34,6 +36,7 @@
             <span><i class="sw early"></i>Payment earlier</span>
             <span><i class="sw risk"></i>Work started before payment</span>
             <span><i class="sw moved"></i>Reassigned</span>
+            <span><i class="sw base"></i>Original plan</span>
           </div>
         </div>
         <div id="gantt" class="gantt-host"></div>
@@ -52,10 +55,16 @@
           <button class="link" id="reset" type="button">Back to the promised date</button>
         </aside>
       </section>
+
+      <section class="activity" aria-label="Payment and decision activity">
+        <h2>Activity</h2>
+        <p class="hint">Every payment event and every decision is recorded here, newest first.</p>
+        <ol id="activity" class="activity-list"></ol>
+      </section>
     </main>
 
     <footer class="foot">
-      <p>Schedules, cash and risk come from a deterministic engine. The AI explains them and drafts the message, and answers that use a number the engine did not produce are rejected. Client payment habits are sample data.</p>
+      <p>Schedules, cash and risk come from a deterministic engine. The AI explains them and drafts the message, and answers that use a number the engine did not produce are rejected. The agency, its projects and client payment habits are sample data. PayPal events and the activity list are live sandbox records.</p>
     </footer>
     <script type="module" src="./main.js"></script>
   </body>

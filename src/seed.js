@@ -40,4 +40,7 @@ export const agency = {
 };
 
 // The T4 event: the Acme deposit that was due on day 5 now arrives on day 15.
+// Assumption, disclosed in the README: an early-payment discount is accepted 60% of the time.
+agency.earlyPayOffer = { pct: 3, withinDays: 2, acceptProb: 0.6 };
+
 export const lateDeposit = { paymentId: 'acme-deposit', newDay: 15 };

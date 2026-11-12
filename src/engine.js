@@ -237,6 +237,25 @@ export function generatePlans(base, event) {
     };
   }
 
+  // Plan D: offer an early-payment discount. The figures show the client accepting; the simulation
+  // also covers the client declining, in which case the original late date still applies.
+  const offer = base.earlyPayOffer;
+  if (offer && payment.day !== undefined && base.today + offer.withinDays < lateDay) {
+    const day = base.today + offer.withinDays;
+    const discount = Math.round((payment.amount * offer.pct) / 100);
+    const d = clone(late);
+    const dp = d.payments.find((x) => x.id === event.paymentId);
+    dp.day = day;
+    dp.amount = payment.amount - discount;
+    out.D = {
+      name: `Offer ${offer.pct}% off to pay early`,
+      change: `Offer ${offer.pct}% off ($${discount}) if "${payment.label}" is paid by day ${day}. If the client declines, it still lands on day ${lateDay}.`,
+      risk: `costs $${discount} and works only if the client accepts`,
+      data: d,
+      offer: { paymentId: event.paymentId, day, amount: dp.amount, discount, fallbackDay: lateDay, acceptProb: offer.acceptProb },
+    };
+  }
+
   for (const plan of Object.values(out)) {
     const m = evaluate(plan.data);
     Object.assign(plan, {
@@ -253,7 +272,8 @@ export function generatePlans(base, event) {
     if (plan.risk === null) plan.risk = `${m.unpaidWorkDays} days of unpaid work if the client never pays`;
   }
   for (const [k, plan] of Object.entries(out)) {
-    const dom = Object.entries(out).find(([k2, other]) => k2 !== k && dominates(other, plan));
+    // A plan that depends on the client accepting an offer can't be called strictly better: its figures assume acceptance.
+    const dom = Object.entries(out).find(([k2, other]) => k2 !== k && !other.offer && dominates(other, plan));
     plan.dominatedBy = dom ? dom[0] : null;
   }
   return out;
@@ -284,6 +304,7 @@ export function toLlmInput(base, event, plans, risk) {
           days_below_zero: pl.daysBelowZero,
           risk: pl.risk,
           dominated_by_plan: pl.dominatedBy,
+          ...(pl.offer && { client_accepts_offer_pct: Math.round(pl.offer.acceptProb * 100), discount_cost: pl.offer.discount }),
           ...(risk?.[k] && {
             simulated_futures: risk[k].runs,
             chance_of_missing_payroll_pct: pct(risk[k].pMissPayroll),
@@ -339,16 +360,25 @@ export function simulateRisk(plans, base, { runs = 2000, seed = 7, horizon = 45 
     for (const p of base.payments) d[p.id] = sampleDelay(reliability.get(p.project), rng);
     draws.push(d);
   }
+  const acceptRng = mulberry32(seed + 1); // separate stream, so adding Plan D never changes the other plans' numbers
+  const accepts = draws.map(() => acceptRng());
 
   const out = {};
   for (const [key, plan] of Object.entries(plans)) {
     let missPayroll = 0, shortfallSum = 0, unpaidRuns = 0, unpaidDaysSum = 0;
     const onTime = Object.fromEntries(base.projects.map((p) => [p.id, 0]));
     const lows = [];
-    for (const draw of draws) {
+    for (let r = 0; r < draws.length; r++) {
+      const draw = draws[r];
       const d = clone(plan.data);
+      const accepted = plan.offer && accepts[r] < plan.offer.acceptProb;
       for (const p of d.payments) {
         const x = draw[p.id];
+        if (plan.offer && p.id === plan.offer.paymentId) {
+          if (accepted) continue; // pays the discounted amount on the offered day
+          p.day = plan.offer.fallbackDay;
+          p.amount = plan.offer.amount + plan.offer.discount; // declined: full amount, original late date
+        }
         if (x.never) { p.day = NEVER; delete p.afterTasks; delete p.lag; }
         else if (p.day !== undefined) p.day += x.delay;
         else p.lag += x.delay;

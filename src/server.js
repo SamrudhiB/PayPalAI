@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { agency, lateDeposit } from './seed.js';
 import { generatePlans, simulateRisk, toLlmInput } from './engine.js';
+import { createLedger } from './ledger.js';
 import { buildPrompt, validateExplanation, templateExplanation } from './explain.js';
 
 const PORT = process.env.PORT || 3000;
@@ -20,7 +21,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.join(here, '..', 'dist');
 
 const events = []; // newest first, in memory (swap for SQLite later)
-const seen = new Set(); // PayPal retries webhooks, so every event id is processed once
+const newLedger = () => createLedger(agency.payments.map((p) => p.id), { expected: Object.fromEntries(agency.payments.map((p) => [p.id, p.amount])) });
+let ledger = newLedger(); // payment states, dedupe and audit trail
 
 /* ---------- PayPal webhook ---------- */
 
@@ -217,7 +219,7 @@ export const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/payment-request') {
-    try { return send(res, 200, await createPaymentRequest(publicOrigin(req))); }
+    try { const r = await createPaymentRequest(publicOrigin(req)); ledger.requested(lateDeposit.paymentId, r.orderId); return send(res, 200, r); }
     catch (e) { return send(res, 502, e.message); }
   }
 
@@ -231,26 +233,46 @@ export const server = http.createServer(async (req, res) => {
     return res.end();
   }
 
+  if (req.method === 'POST' && url.pathname === '/api/reset') { // demo only: start the story again
+    ledger = newLedger();
+    events.length = 0;
+    return send(res, 200, { ok: true });
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/state') return send(res, 200, { payments: ledger.state(), audit: ledger.audit() });
+
+  if (req.method === 'POST' && url.pathname === '/api/decision') {
+    try {
+      const { kind, detail } = JSON.parse(await readBody(req, 5000));
+      if (!['plan_approved', 'plan_rejected', 'message_copied'].includes(kind)) return send(res, 400, 'unknown decision');
+      ledger.decision(kind, String(detail ?? '').slice(0, 200));
+      return send(res, 200, { ok: true });
+    } catch { return send(res, 400, 'bad request'); }
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/events') return send(res, 200, events);
 
   if (req.method === 'POST' && url.pathname === '/webhook') {
     let event;
     try { event = JSON.parse(await readBody(req)); } catch { return send(res, 400, 'bad json'); }
-    if (event.id && seen.has(event.id)) return send(res, 200, 'duplicate ignored');
-    if (event.id) seen.add(event.id);
+    if (ledger.audit().some((a) => a.eventId && a.eventId === event.id)) return send(res, 200, 'duplicate ignored');
     const signature = await verifySignature(req.headers, event);
-    const record = {
-      receivedAt: new Date().toISOString(),
-      id: event.id,
-      type: event.event_type,
-      custom_id: event.resource?.custom_id ?? null,
-      amount: event.resource?.amount?.value ?? null,
-      signature,
-    };
-    events.unshift(record);
-    if (events.length > 100) events.pop();
-    console.log('webhook', JSON.stringify(record));
-    return send(res, 200, 'ok');
+    const result = ledger.receive(event, signature);
+    if (result.outcome !== 'duplicate') {
+      const record = {
+        receivedAt: new Date().toISOString(),
+        id: event.id,
+        type: event.event_type,
+        custom_id: event.resource?.custom_id ?? null,
+        amount: event.resource?.amount?.value ?? null,
+        signature,
+        outcome: result.outcome,
+      };
+      events.unshift(record);
+      if (events.length > 100) events.pop();
+      console.log('webhook', JSON.stringify(record));
+    }
+    return send(res, result.status, result.outcome);
   }
 
   if (req.method === 'GET') return serveStatic(res, url.pathname);

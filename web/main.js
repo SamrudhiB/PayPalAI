@@ -75,6 +75,47 @@ function renderBanner() {
     ${state.applied ? `<div class="state" role="status">Plan ${state.applied} approved. The schedule below shows the approved plan.</div>` : ''}`;
 }
 
+/* ---------- overview: every figure is calculated from the data ---------- */
+
+function renderOverview() {
+  const plan = state.plans[state.selected];
+  const lateProject = promised.project;
+  const projectsAtRisk = Object.values(plan.projects).filter((p) => p.finish > p.deadline).length;
+  const heldUp = agency.payments.filter((p) => p.project === lateProject).reduce((a, p) => a + p.amount, 0);
+  const blocked = agency.tasks.filter((t) => t.gate === PAYMENT);
+  const risk = state.risk[state.selected];
+  const miss = Math.round(risk.pMissPayroll * 100);
+  const tiles = state.paid
+    ? [['Active projects', agency.projects.length, ''], ['Payments late', 0, 'good'], ['Work blocked', 0, 'good'], ['Projects at risk', projectsAtRisk, projectsAtRisk ? 'warn' : 'good'], ['Revenue held up', usd(0), 'good'], ['Payroll miss chance', miss + '%', miss >= 50 ? 'bad' : miss ? 'warn' : 'good']]
+    : [['Active projects', agency.projects.length, ''], ['Payments late', 1, 'bad'], ['Tasks blocked', blocked.length, 'bad'], ['Projects at risk', projectsAtRisk, projectsAtRisk ? 'warn' : 'good'], ['Revenue held up', usd(heldUp), 'warn'], [`Payroll miss chance`, miss + '%', miss >= 50 ? 'bad' : miss ? 'warn' : 'good']];
+  const label = (l) => (l === 'Payroll miss chance' ? `${l} (Plan ${state.selected})` : l);
+  $('#overview').innerHTML = tiles.map(([l, v, c]) => `<div class="tile ${c}"><span class="tile-v">${esc(String(v))}</span><span class="tile-l">${esc(label(l))}</span></div>`).join('');
+}
+
+/* ---------- activity feed (server audit trail) ---------- */
+
+const ACTIVITY = {
+  payment_requested: 'Payment requested',
+  signature_verified: 'PayPal signature verified',
+  event_rejected: 'Event rejected',
+  event_ignored: 'Event ignored',
+  payment_state: 'Payment updated',
+  schedule_recalculated: 'Schedule recalculated',
+  plan_approved: 'Plan approved',
+  plan_rejected: 'Approval withdrawn',
+  message_copied: 'Client message copied',
+};
+const BAD = new Set(['event_rejected']);
+const GOOD = new Set(['signature_verified', 'schedule_recalculated']);
+
+function renderActivity(audit) {
+  const rows = audit.length ? audit.slice(0, 12).map((a) => {
+    const t = new Date(a.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return `<li class="${BAD.has(a.kind) ? 'bad' : GOOD.has(a.kind) ? 'good' : ''}"><time>${esc(t)}</time><b>${esc(ACTIVITY[a.kind] ?? a.kind)}</b><span>${esc(a.detail)}</span></li>`;
+  }).join('') : '<li class="empty"><span>Nothing yet. Approve a plan and request the payment to see events appear here.</span></li>';
+  $('#activity').innerHTML = rows;
+}
+
 /* ---------- plan cards ---------- */
 
 function cashRange() {
@@ -137,7 +178,8 @@ function renderPlans() {
         <div class="bar" aria-hidden="true"><i style="width:${payrollPct}%"></i></div>
         <dt>${esc(clientName)} delivered</dt><dd class="${acme.slip ? 'bad' : 'good'}">day ${acme.finish}${acme.slip ? ` (${acme.slip} late)` : ' (on time)'}</dd>
         <dt>Brightly delivered</dt><dd class="${bright.slip ? 'bad' : 'good'}">day ${bright.finish}${bright.slip ? ` (${bright.slip} late)` : ' (on time)'}</dd>
-        <dt>Lowest cash, if paid on the promised date</dt><dd class="${plan.lowestCash < 0 ? 'bad' : ''}">${usd(plan.lowestCash)}</dd>
+        <dt>${plan.offer ? `Lowest cash, if ${esc(clientName)} accepts` : 'Lowest cash, if paid on the promised date'}</dt><dd class="${plan.lowestCash < 0 ? 'bad' : ''}">${usd(plan.lowestCash)}</dd>
+        ${plan.offer ? `<dt>Chance ${esc(clientName)} accepts (assumed)</dt><dd>${Math.round(plan.offer.acceptProb * 100)}%</dd>` : ''}
         <dt>Unpaid-work risk</dt><dd class="${plan.unpaidWorkDays ? 'warn' : ''}">${plan.unpaidWorkDays ? `${plan.unpaidWorkDays} days, ${pct(r.pUnpaidWork)}% chance` : 'none'}</dd>
       </dl>`;
     btn.addEventListener('click', () => select(key));
@@ -161,6 +203,10 @@ const orderOfPayment = (p) => {
   return taskIndex[p.afterTasks[p.afterTasks.length - 1]] * 10 + 5; // a milestone sits just below the work that earns it
 };
 
+const origTask = new Map(baseline.schedule.tasks.map((t) => [t.id, t]));
+const origPay = baseline.schedule.paymentDays;
+const taskBaseline = (id) => { const o = origTask.get(id) ?? origTask.get(id.slice(0, -1)); return o ? [{ startDate: dayToDate(o.start), endDate: dayAfter(o.end) }] : []; };
+
 function ganttModel(plan) {
   const homeDays = baseline.schedule.paymentDays;
   const leaves = [];
@@ -176,6 +222,7 @@ function ganttModel(plan) {
       duration: t.end - t.start + 1,
       durationUnit: 'day',
       manuallyScheduled: true,
+      baselines: taskBaseline(t.id),
       cls: `proj-${t.project}${unpaid.has(t.id) ? ' at-risk' : ''}${moved ? ' moved' : ''}`,
     });
   }
@@ -191,6 +238,7 @@ function ganttModel(plan) {
       startDate: dayToDate(day),
       duration: 0,
       manuallyScheduled: true,
+      baselines: [{ startDate: dayToDate(home), endDate: dayToDate(home) }],
       cls: `pay pay-${status}`,
     });
   }
@@ -219,11 +267,12 @@ function createGantt() {
     viewPreset: 'weekAndDay',
     rowHeight: 30,
     barMargin: 5,
-    columns: [{ type: 'name', text: 'Work and payments', width: 270 }],
+    columns: [{ type: 'name', text: 'Work and payments', width: window.innerWidth < 700 ? 150 : 270 }],
     features: {
       timeRanges: { showCurrentTimeLine: false, showHeaderElements: false },
       indicators: { items: { earlyDates: false, lateDates: false, deadlineDate: true, constraintDate: false } },
       projectLines: false,
+      baselines: true,
       taskMenu: false,
       cellMenu: false,
       headerMenu: false,
@@ -332,7 +381,8 @@ function renderAssess() {
       <li>The schedule and cash chart now show the deposit landing on day ${promised.day}.</li></ul>
       <div class="actions"><button class="btn ghost" id="replay" type="button">Replay the late payment</button></div>`;
     $('#replay').addEventListener('click', () => {
-      state.dismissed.add(state.paid.id); state.paid = null; state.applied = null; state.request = null; state.newDay = lateDeposit.newDay;
+      fetch('/api/reset', { method: 'POST' }).then(pollEvents).catch(() => {});
+      state.paid = null; state.applied = null; state.request = null; state.newDay = lateDeposit.newDay;
       $('#slider').value = state.newDay; compute(2000); renderAll(); loadExplanation();
     });
     return;
@@ -363,9 +413,10 @@ function renderAssess() {
   $('#approve')?.addEventListener('click', () => {
     state.applied = ex.recommended_plan;
     state.selected = ex.recommended_plan;
+    logDecision('plan_approved', `Manager approved Plan ${ex.recommended_plan}: ${state.plans[ex.recommended_plan].name}`);
     renderAll();
   });
-  $('#undo')?.addEventListener('click', () => { state.applied = null; renderAll(); });
+  $('#undo')?.addEventListener('click', () => { logDecision('plan_rejected', `Manager withdrew approval of Plan ${state.applied}`); state.applied = null; renderAll(); });
   $('#copy').addEventListener('click', async (e) => {
     try { await navigator.clipboard.writeText(ex.client_message); e.target.textContent = 'Copied'; }
     catch { e.target.textContent = 'Select the text above to copy'; }
@@ -394,6 +445,10 @@ async function requestPayment() {
     state.request = 'Could not create the PayPal link: ' + String(e.message).slice(0, 160);
   }
   renderAssess();
+}
+
+function logDecision(kind, detail) {
+  fetch('/api/decision', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, detail }) }).then(pollEvents).catch(() => {});
 }
 
 let explainToken = 0;
@@ -440,13 +495,16 @@ function setupSlider() {
 
 async function pollEvents() {
   try {
-    const res = await fetch('/api/events');
-    const events = await res.json();
+    const [events, ledger] = await Promise.all([fetch('/api/events').then((r) => r.json()), fetch('/api/state').then((r) => r.json())]);
     const e = events[0];
-    const settled = events.find((x) => x.type === 'PAYMENT.CAPTURE.COMPLETED' && x.custom_id === PAYMENT && x.signature === 'SUCCESS' && !state.dismissed.has(x.id));
-    if (settled && !state.paid) {
-      state.paid = settled; state.newDay = promised.day; state.selected = 'A'; state.applied = null;
+    renderActivity(ledger.audit);
+    if (ledger.payments[PAYMENT] === 'paid' && !state.paid) {
+      const settled = events.find((x) => x.type === 'PAYMENT.CAPTURE.COMPLETED' && x.custom_id === PAYMENT) ?? {};
+      state.paid = { id: settled.id, type: 'PAYMENT.CAPTURE.COMPLETED', custom_id: PAYMENT, amount: settled.amount ?? promised.amount.toFixed(2), signature: settled.signature ?? 'SUCCESS' };
+      state.newDay = promised.day; state.selected = 'A'; state.applied = null;
       $('#slider').value = state.newDay; compute(2000); renderAll(); renderAssess();
+    } else if (ledger.payments[PAYMENT] !== 'paid' && state.paid) {
+      state.paid = null; // the server was reset
     }
     $('#feed').innerHTML = e
       ? `${esc(e.type)}${e.custom_id ? ' for ' + esc(e.custom_id) : ''}${e.amount ? ' ' + esc('$' + e.amount) : ''}, signature <span class="${e.signature === 'SUCCESS' ? 'ok' : ''}">${esc(e.signature)}</span>`
@@ -462,12 +520,14 @@ function renderAll() {
   document.body.classList.toggle('paid', !!state.paid);
   renderBanner();
   renderPlans();
+  renderOverview();
   renderBoard();
   if (state.explanation || state.paid) renderAssess();
 }
 
 compute(2000);
 renderBanner();
+renderOverview();
 renderPlans();
 createGantt();
 renderBoard();

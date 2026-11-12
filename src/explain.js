@@ -12,11 +12,12 @@ Below are the recovery plans, already computed by deterministic code, with risk 
 Rules:
 - Use ONLY numbers that appear in the data. Never calculate, estimate or invent a number.
 - Refer to plans by letter and name.
+- A plan with client_accepts_offer_pct only works if the client accepts; its other figures assume they accept, so weigh them with that chance.
 - Plans marked dominated_by_plan are strictly worse than the plan named there; say so if relevant.
 - Write for a busy business owner: plain words, no jargon.
 
 Return JSON with exactly these keys:
-{"recommended_plan":"A"|"B"|"C","headline":"one sentence","reasons":["2-3 short sentences"],"when_to_pick_another":"one sentence naming the other plan and the situation that favours it","client_message":"a short, friendly but firm payment reminder to the client, no new numbers beyond the amount and dates in the data"}
+{"recommended_plan":"A"|"B"|"C"|"D" (one of the plan letters in the data),"headline":"one sentence","reasons":["2-3 short sentences"],"when_to_pick_another":"one sentence naming the other plan and the situation that favours it","client_message":"a short, friendly but firm payment reminder to the client, no new numbers beyond the amount and dates in the data"}
 
 DATA:
 ${JSON.stringify(input, null, 2)}`;
@@ -59,7 +60,8 @@ export function templateExplanation(input) {
   const [bestKey, best] = entries[0];
   const others = entries.slice(1);
   const lp = input.facts.late_payment;
-  const alt = others.find(([, p]) => p.dominated_by_plan !== bestKey) ?? others[0];
+  const finish = (p) => Math.max(...Object.values(p.project_finish_days));
+  const alt = [...others].filter(([, p]) => p.dominated_by_plan !== bestKey).sort((a, b) => finish(a[1]) - finish(b[1]))[0] ?? others[0];
 
   const reasons = [
     `Plan ${bestKey} (${best.name}) has the lowest chance of missing payroll: ${best.chance_of_missing_payroll_pct}%.`,
@@ -73,7 +75,9 @@ export function templateExplanation(input) {
     headline: `Go with Plan ${bestKey}: ${best.name}.`,
     reasons,
     when_to_pick_another: alt
-      ? `Pick Plan ${alt[0]} (${alt[1].name}) if protecting a deadline matters more than protecting cash.`
+      ? (finish(alt[1]) < finish(best)
+        ? `Pick Plan ${alt[0]} (${alt[1].name}) if protecting a deadline matters more than protecting cash.`
+        : `Pick Plan ${alt[0]} (${alt[1].name}) if you prefer its trade-off to Plan ${bestKey}.`)
       : 'No other plan is worth considering.',
     client_message:
       `Hi ${lp.client} team, a quick heads-up: the ${usd(lp.amount)} payment for "${lp.label}" was due on day ${lp.expected_day} and is now expected on day ${lp.new_expected_day}. ` +

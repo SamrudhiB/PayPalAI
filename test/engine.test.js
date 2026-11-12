@@ -153,3 +153,22 @@ test('LLM input includes whole-number percentages from the simulation', () => {
   assert.equal(input.plans.C.chance_of_finishing_on_time_pct['Acme website'], 100);
   assert.equal(input.plans.B.simulated_futures, 500);
 });
+
+import { agency as _agency, lateDeposit as _late } from '../src/seed.js';
+import { generatePlans as _gen, simulateRisk as _sim } from '../src/engine.js';
+test('Plan D: early-payment offer is a fourth plan and never dominates others', () => {
+  const plans = _gen(_agency, _late);
+  assert.deepEqual(Object.keys(plans), ['A', 'B', 'C', 'D']);
+  assert.equal(plans.D.offer.discount, 180);
+  assert.equal(plans.D.data.payments.find((p) => p.id === 'acme-deposit').amount, 5820);
+  assert.equal(plans.B.dominatedBy, null);
+  assert.equal(plans.A.dominatedBy, 'B');
+});
+test('Plan D: adding it does not change the risk numbers of A, B and C', () => {
+  const plans = _gen(_agency, _late);
+  const { D, ...abc } = plans;
+  const withD = _sim(plans, _agency, { runs: 500, seed: 7 });
+  const without = _sim(abc, _agency, { runs: 500, seed: 7 });
+  for (const k of ['A', 'B', 'C']) assert.deepEqual(withD[k], without[k]);
+  assert.ok(withD.D.pMissPayroll > withD.B.pMissPayroll * 0.5 && withD.D.pMissPayroll < 1);
+});

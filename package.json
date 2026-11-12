@@ -1,5 +1,5 @@
 {
-  "name": "flowstate-engine",
+  "name": "ballast",
   "version": "0.2.0",
   "type": "module",
   "private": true,
@@ -10,7 +10,7 @@
     "start": "node src/server.js",
     "build": "vite build",
     "dev": "vite",
-    "test": "node --test test/engine.test.js test/explain.test.js",
+    "test": "node --test test/engine.test.js test/explain.test.js test/ledger.test.js",
     "demo": "node src/run.js"
   },
   "dependencies": {
